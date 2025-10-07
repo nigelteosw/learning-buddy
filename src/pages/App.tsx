@@ -1,20 +1,22 @@
 import { useRef, useState } from "react";
 import {
-  hasSummarizer,
-  summarizeText,
-  type SummaryLength,
+  summarizerClient,
+  defaultOpts,
   type SummaryType,
-} from "../lib/summarizer";
+  type SummaryLength,
+} from "../lib/summarizerClient";
 
 export default function App() {
   const [input, setInput] = useState("");
   const [out, setOut] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [length, setLength] = useState<SummaryLength>("medium");
-  const [stype, setStype] = useState<SummaryType>("key-points");
 
-  // Manage the active request & controller so Cancel actually aborts summarize()
+  // options UI
+  const [stype, setStype] = useState<SummaryType>("key-points");
+  const [length, setLength] = useState<SummaryLength>("medium");
+
+  // Manage cancelation / ignore-late-results
   const reqToken = useRef(0);
   const ctrlRef = useRef<AbortController | null>(null);
 
@@ -31,35 +33,49 @@ export default function App() {
     setBusy(true);
     setErr(null);
     setOut("");
-
-    // fresh controller per run
     ctrlRef.current = new AbortController();
 
     try {
-      const ok = await hasSummarizer();
-      if (!ok) {
-        setErr("Summarizer API not available in this Chrome profile.");
-        return;
-      }
-
-      const summary = await summarizeText(input, {
+      // 1) update global opts (optional persist to chrome.storage.sync if you want)
+      summarizerClient.setOpts({
+        ...defaultOpts,
         type: stype,
         length,
-        format: "markdown",
-        // context: "This article is intended for a tech-savvy audience.",
-        signal: ctrlRef.current.signal, // <-- real cancel hook
+        // format: "markdown", // default already
+        // outputLanguage: "en", // default from navigator; set explicitly if you prefer
       });
 
-      if (myToken !== reqToken.current) return; // user canceled
+      // 2) IMPORTANT: create the session *inside this click handler*
+      await summarizerClient.initFromUserGesture({
+        ...defaultOpts,
+        type: stype,
+        length,
+        // outputLanguage: "en",
+      });
 
-      if (summary == null) {
+      // 3) summarize (reuses the session; no more user activation needed)
+      const summary = await summarizerClient.summarize(input, {
+        signal: ctrlRef.current.signal,
+        // context: "This article is intended for a tech-savvy audience.",
+      });
+
+      if (myToken !== reqToken.current) return; // was canceled
+
+      if (!summary) {
         setErr("Summarization failed (no result).");
       } else {
         setOut(summary);
+        // Optional: store so popup re-opens with latest result
+        try {
+          await chrome.storage?.local?.set({
+            lastSummary: summary,
+            lastSourceLen: input.length,
+            lastAt: Date.now(),
+          });
+        } catch {}
       }
     } catch (e: any) {
       if (myToken !== reqToken.current) return;
-      // Optional: map DOMExceptions like NotReadableError / NotSupportedError
       setErr(e?.message ?? "Unexpected error during summarization.");
     } finally {
       if (myToken === reqToken.current) setBusy(false);
