@@ -1,20 +1,20 @@
+// wxt.config.ts
 import { defineConfig } from 'wxt';
+import react from '@vitejs/plugin-react';
 
-// See https://wxt.dev/api/config.html
 export default defineConfig({
+  srcDir: "src",             // default: "."
+  vite: () => ({
+    plugins: [react()],
+  }),
   manifest: {
-    name: 'Learning Buddy',
-    version: '0.0.1',
-    manifest_version: 3,
-    permissions: ['storage', 'activeTab', 'scripting'],
-    host_permissions: ['<all_urls>'],
-    action: {
-      default_popup: 'popup/index.html',
-    },
-    icons: {
-      16: 'icon/16.png',
-      48: 'icon/48.png',
-      128: 'icon/128.png',
-    },
+    // Add all the permissions you outlined
+    permissions: [
+      'sidePanel',
+      'contextMenus',
+      'alarms',
+      'storage', // For chrome.storage.sync
+      'activeTab', // For the content script to work
+    ],
   },
 });
