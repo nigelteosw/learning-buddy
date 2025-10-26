@@ -6,6 +6,7 @@ import { ReviewList } from '@/components/ReviewList';
 
 function App() {
   const [frontText, setFrontText] = useState('');
+  const [backText, setBackText] = useState('');
   const [originalHighlight, setOriginalHighlight] = useState('');
   const [activeTab, setActiveTab] = useState<'addCard' | 'review'>('addCard');
   
@@ -20,6 +21,7 @@ function App() {
       if (message.type === 'explain-text' && message.text) {
         setOriginalHighlight(message.text);
         setFrontText(message.text);
+        setBackText(message.explanation || '');
         setCardToEdit(null); // Clear any active edit
         setActiveTab('addCard');
       }
@@ -34,6 +36,7 @@ function App() {
   const handleCardSaved = () => {
     setOriginalHighlight('');
     setFrontText('');
+    setBackText('');
     setCardToEdit(null); // Clear the edited card
     setActiveTab('review');
   };
@@ -81,6 +84,7 @@ function App() {
         <AddCardForm
           initialFrontText={frontText}
           initialHighlight={originalHighlight}
+          initialBackText={backText}  
           onCardSaved={handleCardSaved}
           cardToEdit={cardToEdit} // 6. Pass the card to the form
         />

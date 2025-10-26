@@ -44,7 +44,7 @@ export class SelectionButton {
     Object.assign(btn.style, {
       position: 'fixed',              // KEY: viewport coords
       display: 'none',                // hidden by default
-      zIndex: '2147483647',           // top of basically everything
+      zIndex: '10',           // top of basically everything
       background: '#111',
       color: '#fff',
       border: 'none',
@@ -160,6 +160,18 @@ export class SelectionButton {
     btn.style.top = `${top}px`;
     btn.style.left = `${left}px`;
     btn.style.display = 'block';
+  }
+
+  public destroy() {
+    // 1. Remove global event listeners
+    document.removeEventListener('mouseup', this.handleMouseUp);
+    document.removeEventListener('mousedown', this.handleMouseDown);
+    
+    // 2. Remove the button from the page
+    if (this.buttonEl) {
+      this.buttonEl.remove();
+    }
+    console.log('LEARNING BUDDY: Button destroyed');
   }
 
   private hide() {

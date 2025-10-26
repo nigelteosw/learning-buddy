@@ -12,7 +12,7 @@ export type GlobalSummarizerOpts = {
 };
 
 export const defaultSummarizerOpts: GlobalSummarizerOpts = {
-  sharedContext: "Do not include the name of the concept at all.",
+  sharedContext: "These are requests to summarize a concept. DO NOT use the name of the concepts in your summary.",
   type: "tldr",
   length: "short",
   format: "plain-text",

@@ -2,7 +2,8 @@ import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { Panel } from '@/components/Panel';
 import { SelectionButton } from '@/lib/SelectionButton';
-import '@/assets/tailwind.css'
+import { isExtensionEnabled } from '@/lib/settings';
+
 
 import { writerClient, defaultWriterOpts } from '@/lib/writerClient';
 import { summarizerClient, defaultSummarizerOpts } from '@/lib/summarizerClient';

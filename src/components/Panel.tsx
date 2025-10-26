@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import '@/assets/tailwind.css'
 
 export type PanelProps = {
   content: string;
