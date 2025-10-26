@@ -1,7 +1,27 @@
 {
-  "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
-    "jsx": "react-jsx"
-  }
+    
+    // This adds the "@/*" import alias
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  
+  // This tells TypeScript to include WXT's types
+  // and all your source code.
+  "include": [
+    ".wxt/wxt.d.ts",
+    "src"
+  ]
 }
