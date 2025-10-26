@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import '@/assets/tailwind.css'
+import './Panel.css';
 
 export type PanelProps = {
   content: string;
@@ -119,14 +119,8 @@ export const Panel: React.FC<PanelProps> = ({
   return (
     <div
       ref={ref}
-      className={`
-        absolute  /* <- viewport-relative because parent is fixed */
-        z-[2147483647]
-        w-[380px] max-h-[60vh]
-        bg-zinc-900 text-white rounded-xl border border-zinc-700
-        shadow-2xl flex flex-col overflow-hidden font-sans
-        text-[13px] leading-[1.5] select-none
-      `}
+      // 3. APPLY the main ID
+      id="lb-panel"
       style={{
         ...dynamicStyle,
         cursor: drag ? "grabbing" : "default",
@@ -135,28 +129,24 @@ export const Panel: React.FC<PanelProps> = ({
       {/* HEADER */}
       <div
         onMouseDown={startDrag}
-        className={`
-          bg-zinc-800 border-b border-zinc-700 
-          flex items-center justify-between px-3 py-3
-          ${drag ? "cursor-grabbing" : "cursor-grab"}
-        `}
+        // 4. APPLY header ID and handle cursor dynamically
+        id="lb-panel-header"
+        style={{
+          cursor: drag ? "grabbing" : "grab",
+        }}
       >
         {/* Title + subtitle */}
-        <div className="flex flex-col leading-tight">
-          <div className="text-[13px] font-semibold text-white">
+        {/* 5. APPLY nested element IDs */}
+        <div id="lb-panel-header-title">
+          <div id="lb-panel-header-title-main">
             Learning Buddy
           </div>
-          <div className="text-[11px] text-zinc-400">AI explanation panel</div>
+          <div id="lb-panel-header-title-sub">AI explanation panel</div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div id="lb-panel-header-actions">
           <button
-            className={`
-              px-2.5 py-1 text-[12px] font-medium rounded-md
-              bg-zinc-700 border border-zinc-600
-              hover:bg-zinc-600 transition-colors
-            `}
             onClick={() => {
               onAdd(content, explanation);
             }}
@@ -164,31 +154,21 @@ export const Panel: React.FC<PanelProps> = ({
             Add
           </button>
 
-          <button
-            className={`
-              px-2.5 py-1 text-[12px] font-medium rounded-md
-              bg-zinc-700 border border-zinc-600
-              hover:bg-zinc-600 transition-colors
-            `}
-            onClick={onClose}
-          >
+          <button onClick={onClose}>
             Close
           </button>
         </div>
       </div>
 
       {/* content */}
-      <div className="px-3 pt-3 pb-1 text-[13px] font-semibold text-white leading-snug">
+      {/* 6. APPLY content heading ID */}
+      <div id="lb-panel-content-heading">
         {content}
       </div>
 
       {/* Body */}
-      <div
-        className={`
-          px-3 pb-3 text-[13px] text-zinc-200
-          whitespace-pre-wrap overflow-y-auto flex-1
-        `}
-      >
+      {/* 7. APPLY body ID */}
+      <div id="lb-panel-body">
         {explanation}
       </div>
     </div>

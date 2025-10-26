@@ -1,0 +1,88 @@
+/* src/components/Panel.css */
+/* Base styles for the panel */
+#lb-panel {
+  position: absolute; /* Changed from fixed, parent is fixed */
+  z-index: 2147483647;
+  width: 380px;
+  max-height: 60vh;
+  background-color: #18181b; /* zinc-900 */
+  color: white;
+  border-radius: 0.75rem; /* rounded-xl */
+  border: 1px solid #3f3f46; /* border-zinc-700 */
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); /* shadow-2xl */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: sans-serif; /* font-sans */
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: none; /* select-none */
+}
+
+/* Header styles */
+#lb-panel-header {
+  background-color: #27272a; /* zinc-800 */
+  border-bottom: 1px solid #3f3f46; /* border-zinc-700 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.75rem; /* px-3 py-3 */
+}
+
+/* Header title */
+#lb-panel-header-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25; /* leading-tight */
+}
+#lb-panel-header-title-main {
+  font-size: 13px;
+  font-weight: 600; /* font-semibold */
+  color: white;
+}
+#lb-panel-header-title-sub {
+  font-size: 11px;
+  color: #a1a1aa; /* text-zinc-400 */
+}
+
+/* Header actions */
+#lb-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* gap-2 */
+}
+
+/* General button style for header */
+#lb-panel-header-actions button {
+  padding: 0.25rem 0.625rem; /* px-2.5 py-1 */
+  font-size: 12px;
+  font-weight: 500; /* font-medium */
+  border-radius: 0.375rem; /* rounded-md */
+  background-color: #3f3f46; /* bg-zinc-700 */
+  border: 1px solid #52525b; /* border-zinc-600 */
+  color: white;
+  transition: background-color 0.15s ease-in-out; /* transition-colors */
+  cursor: pointer;
+}
+#lb-panel-header-actions button:hover {
+  background-color: #52525b; /* hover:bg-zinc-600 */
+}
+
+/* Content section */
+#lb-panel-content-heading {
+  padding: 0.75rem 0.75rem 0.25rem; /* px-3 pt-3 pb-1 */
+  font-size: 13px;
+  font-weight: 600; /* font-semibold */
+  color: white;
+  line-height: 1.375; /* leading-snug */
+}
+
+/* Body (explanation) section */
+#lb-panel-body {
+  padding: 0 0.75rem 0.75rem; /* px-3 pb-3 */
+  font-size: 13px;
+  color: #e4e4e7; /* text-zinc-200 */
+  white-space: pre-wrap;
+  overflow-y: auto;
+  flex: 1;
+}
