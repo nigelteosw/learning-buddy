@@ -1,55 +1,96 @@
-import { useState } from 'react';
-import reactLogo from '@/assets/react.svg';
-import wxtLogo from '/wxt.svg';
+import React, { useState, useEffect } from 'react';
+import { db, Card } from '@/lib/db'; // 1. Import Card type
+import { useLiveQuery } from 'dexie-react-hooks';
+import { AddCardForm } from '@/components/AddCardForm';
+import { ReviewList } from '@/components/ReviewList';
 
 function App() {
-  const [count, setCount] = useState(0);
+  const [frontText, setFrontText] = useState('');
+  const [originalHighlight, setOriginalHighlight] = useState('');
+  const [activeTab, setActiveTab] = useState<'addCard' | 'review'>('addCard');
+  
+  // 2. Add state to hold the card being edited
+  const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
+
+  const cardCount = useLiveQuery(() => db.cards.count(), [], 0);
+
+  // 3. Update message listener to clear 'cardToEdit'
+  useEffect(() => {
+    const messageListener = (message: any) => {
+      if (message.type === 'explain-text' && message.text) {
+        setOriginalHighlight(message.text);
+        setFrontText(message.text);
+        setCardToEdit(null); // Clear any active edit
+        setActiveTab('addCard');
+      }
+    };
+    browser.runtime.onMessage.addListener(messageListener);
+    return () => {
+      browser.runtime.onMessage.removeListener(messageListener);
+    };
+  }, []);
+
+  // 4. Update this callback to ALSO clear 'cardToEdit'
+  const handleCardSaved = () => {
+    setOriginalHighlight('');
+    setFrontText('');
+    setCardToEdit(null); // Clear the edited card
+    setActiveTab('review');
+  };
+  
+  // 5. Create a handler for when 'Edit' is clicked
+  const handleEditRequest = (card: Card) => {
+    setCardToEdit(card);
+    setActiveTab('addCard'); // Switch to the form
+  };
 
   return (
-    // 2. Center everything on the page
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 p-8 text-center text-white">
-      
-      {/* 3. Logo container */}
-      <div className="flex justify-center p-4">
-        <a href="https://wxt.dev" target="_blank">
-          <img 
-            src={wxtLogo} 
-            // 4. Replaced ".logo" class
-            className="h-24 p-2 transition-all duration-300 will-change-[filter] hover:drop-shadow-[0_0_2em_#fca311]" 
-            alt="WXT logo" 
-          />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img 
-            src={reactLogo} 
-            // 5. Replaced ".logo .react" class
-            className="h-24 p-2 transition-all duration-300 will-change-[filter] hover:drop-shadow-[0_0_2em_#61dafbaa]" 
-            alt="React logo" 
-          />
-        </a>
-      </div>
-
-      {/* 6. Header */}
-      <h1 className="text-5xl font-bold">WXT + React</h1>
-
-      {/* 7. Replaced ".card" class */}
-      <div className="p-8">
-        <button 
-          onClick={() => setCount((count) => count + 1)}
-          // 8. Basic button styling
-          className="rounded-lg border border-transparent bg-gray-800 px-6 py-3 font-medium transition-colors hover:border-blue-500"
+    <main className="min-h-screen space-y-4 bg-zinc-900 p-4 font-sans text-white">
+      {/* --- TABS --- */}
+      <div className="flex border-b border-zinc-700">
+        <button
+          className={`px-4 py-2 text-sm ${
+            activeTab === 'addCard'
+              ? 'border-b-2 border-blue-500 text-white'
+              : 'text-zinc-400'
+          }`}
+          onClick={() => {
+            setCardToEdit(null); // Clear edit mode if tab is clicked
+            setFrontText(''); // Clear highlight
+            setOriginalHighlight('');
+            setActiveTab('addCard');
+          }}
         >
-          count is {count}
+          {/* Change tab text based on mode */}
+          {cardToEdit ? 'Edit Card' : 'Add Card'}
         </button>
-        <p className="mt-4">
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
+        <button
+          className={`px-4 py-2 text-sm ${
+            activeTab === 'review'
+              ? 'border-b-2 border-blue-500 text-white'
+              : 'text-zinc-400'
+          }`}
+          onClick={() => setActiveTab('review')}
+        >
+          Review ({cardCount})
+        </button>
       </div>
 
-      {/* 9. Replaced ".read-the-docs" class */}
-      <p className="text-gray-400">
-        Click on the WXT and React logos to learn more
-      </p>
+      {/* --- ADD CARD TAB --- */}
+      {activeTab === 'addCard' && (
+        <AddCardForm
+          initialFrontText={frontText}
+          initialHighlight={originalHighlight}
+          onCardSaved={handleCardSaved}
+          cardToEdit={cardToEdit} // 6. Pass the card to the form
+        />
+      )}
+
+      {/* --- REVIEW TAB --- */}
+      {activeTab === 'review' && (
+        // 7. Pass the edit handler to the list
+        <ReviewList onEditRequest={handleEditRequest} />
+      )}
     </main>
   );
 }

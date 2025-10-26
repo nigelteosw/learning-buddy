@@ -5,6 +5,7 @@ import { SelectionButton } from '@/lib/SelectionButton';
 import '@/assets/tailwind.css'
 
 import { writerClient, defaultWriterOpts } from '@/lib/writerClient';
+import { summarizerClient, defaultSummarizerOpts } from '@/lib/summarizerClient';
 
 let panelHost: HTMLElement | null = null;
 let reactRoot: Root | null = null;
@@ -12,30 +13,55 @@ let reactRoot: Root | null = null;
 function ensureReactRoot(): Root {
   if (reactRoot) return reactRoot;
 
-  panelHost = document.createElement('div');
+  panelHost = document.createElement("div");
+  panelHost.id = "__lb-panel-host__";
 
-  const shadow = panelHost.attachShadow({ mode: 'open' });
-  const mount = document.createElement('div');
-  shadow.appendChild(mount);
+  panelHost.style.position = "fixed";
+  panelHost.style.top = "0";
+  panelHost.style.left = "0";
+  panelHost.style.zIndex = "2147483647";
 
   document.body.appendChild(panelHost);
 
-  reactRoot = createRoot(mount);
+  reactRoot = createRoot(panelHost);
   return reactRoot;
 }
 
-function showPanel(content: string, nearRect: DOMRect | null) {
+function showPanel(
+  content: string,
+  explnation: string,
+  nearRect: DOMRect | null
+) {
   const root = ensureReactRoot();
 
   const handleClose = () => {
-    root.render(null); // clear panel
+    root.render(null);
+  };
+
+  const handleAdd = (contentToSave: string, explanationToSave: string) => {
+    // 1. Tell the side panel app what to prefill
+    browser.runtime.sendMessage({
+      type: 'explain-text',
+      text: contentToSave,
+      explanation: explanationToSave,
+    });
+
+    // 2. (Optional but nice) ask background to open the side panel
+    // We can't call browser.sidePanel.open(...) directly here in content script
+    // in all Chrome versions, so forward a "open-sidepanel" request to background.
+    browser.runtime.sendMessage({
+      type: 'open-sidepanel',
+    });
+
   };
 
   root.render(
     <Panel
       content={content}
+      explanation={explnation}
       nearRect={nearRect}
       onClose={handleClose}
+      onAdd={handleAdd} 
     />
   );
 }
@@ -55,24 +81,25 @@ export default defineContentScript({
     const button = new SelectionButton({
       onExplainRequested: async (text, rect) => {
         // 1. Immediately show a "loading" panel near the selection
-        // showPanel('Writing…', rect);
+        showPanel('Please Wait' ,'Writing…', rect);
 
         try {
-          // 2. Make sure writerClient is initialized
+          
           writerClient.setOpts(defaultWriterOpts);
           await writerClient.initFromUserGesture(defaultWriterOpts);
-          // ^ this MUST be called from a user gesture. Good news:
-          // this callback is literally running in response to the user's click
-          // on the Learn button, so it's legit.
+          
+          const writerResult = await writerClient.write(text, {});
 
-          // 3. Ask the Writer API for output
-          const result = await writerClient.writeStreaming(text, {});
+          summarizerClient.setOpts(defaultSummarizerOpts);
+          await summarizerClient.initFromUserGesture(defaultSummarizerOpts);
+          
+          const summarizerResult = await summarizerClient.summarize(text, {});
 
           // 4. Show the result
-          showPanel(result || 'No output.', rect);
+          showPanel(summarizerResult || 'No output.', writerResult || 'No output.', rect);
         } catch (err: any) {
           console.error('[content] writer error:', err);
-          showPanel(`⚠️ ${err?.message ?? String(err)}`, rect);
+          showPanel('Error', `${err?.message ?? String(err)}`, rect);
         }
       },
     });
@@ -90,17 +117,23 @@ export default defineContentScript({
 
         // For context menu we don't have a selection rect in-page,
         // so pass null to dock panel bottom-right.
-        showPanel('Writing…', null);
+        showPanel('Please Wait', 'Writing…', null);
 
         try {
           writerClient.setOpts(defaultWriterOpts);
           await writerClient.initFromUserGesture(defaultWriterOpts);
 
-          const result = await writerClient.write(text, {});
-          showPanel(result || 'No output.', null);
+          const writerResult = await writerClient.write(text, {});
+          
+          summarizerClient.setOpts(defaultSummarizerOpts);
+          await summarizerClient.initFromUserGesture(defaultSummarizerOpts);
+          
+          const summarizerResult = await summarizerClient.summarize(text, {});
+          
+          showPanel(summarizerResult || 'No output.' , writerResult || 'No output.', null);
         } catch (err: any) {
           console.error('[content] writer error (from context menu):', err);
-          showPanel(`⚠️ ${err?.message ?? String(err)}`, null);
+          showPanel('Error', `${err?.message ?? String(err)}`, null);
         }
       }
     });

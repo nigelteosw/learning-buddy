@@ -11,10 +11,11 @@ export type GlobalSummarizerOpts = {
   sharedContext?: string;
 };
 
-export const defaultOpts: GlobalSummarizerOpts = {
-  type: "key-points",
-  length: "medium",
-  format: "markdown",
+export const defaultSummarizerOpts: GlobalSummarizerOpts = {
+  sharedContext: "Do not include the name of the concept at all.",
+  type: "tldr",
+  length: "short",
+  format: "plain-text",
   outputLanguage: (["en","es","ja"].includes((navigator.language||"en").slice(0,2)) 
     ? (navigator.language.slice(0,2) as "en"|"es"|"ja") 
     : "en"),
@@ -29,7 +30,7 @@ type CreateParams = GlobalSummarizerOpts & {
 class SummarizerClient {
   private session: any | null = null;
   private creating?: Promise<any>;
-  private opts: GlobalSummarizerOpts = defaultOpts;
+  private opts: GlobalSummarizerOpts = defaultSummarizerOpts;
 
   setOpts(next: Partial<GlobalSummarizerOpts>) {
     this.opts = { ...this.opts, ...next };
