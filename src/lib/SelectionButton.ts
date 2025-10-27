@@ -9,17 +9,22 @@ export class SelectionButton {
   private currentSelection = '';
   private lastRect: DOMRect | null = null;
   private clickBusy = false;
-  private onExplainRequested: SelectionButtonOpts['onExplainRequested'];
+  // 2. Add a property to hold the callback function
+  private onLearnClickCallback: ((text: string, rect: DOMRect | null) => void) | null = null;
 
-  constructor(opts: SelectionButtonOpts) {
+  constructor(/* REMOVED: opts: SelectionButtonOpts */) {
     console.log('[SelectionButton] constructor');
-    this.onExplainRequested = opts.onExplainRequested;
+    // REMOVED: this.onExplainRequested = opts.onExplainRequested;
 
     this.handleMouseUp = this.handleMouseUp.bind(this);
     this.handleMouseDown = this.handleMouseDown.bind(this);
     this.handleButtonClick = this.handleButtonClick.bind(this);
 
     this.ensureButton();
+  }
+
+  public setOnLearnClick(callback: (text: string, rect: DOMRect | null) => void): void {
+      this.onLearnClickCallback = callback;
   }
 
   public initializeListeners() {
@@ -119,19 +124,22 @@ export class SelectionButton {
   private async handleButtonClick() {
     if (this.clickBusy) return;
     if (!this.currentSelection) return;
+    // 4. Check if the callback has been set
+    if (!this.onLearnClickCallback) {
+        console.error("SelectionButton: onLearnClickCallback not set!");
+        return;
+    }
 
     this.clickBusy = true;
     const text = this.currentSelection;
     const rect = this.lastRect;
 
-    // We hide the bubble immediately for less clutter
     this.hide();
 
     try {
-      this.onExplainRequested(text, rect ?? null);
+      // 5. Call the saved callback function
+      this.onLearnClickCallback(text, rect ?? null);
     } finally {
-      // We keep lastRect in case you want to re-open panel relative to it,
-      // but we clear the busy flag so you can click again on a new selection.
       this.clickBusy = false;
     }
   }

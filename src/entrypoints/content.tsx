@@ -1,142 +1,195 @@
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { Panel } from '@/components/Panel';
-import { SelectionButton } from '@/lib/SelectionButton';
+import { SelectionButton } from '@/lib/SelectionButton'; // Ensure this class exists and is correct
 import { isExtensionEnabled } from '@/lib/settings';
 
+// 1. REMOVE the dangerous Tailwind import
+// import '@/assets/tailwind.css'
+// Make sure Panel.tsx imports its own scoped Panel.css if needed
 
 import { writerClient, defaultWriterOpts } from '@/lib/writerClient';
 import { summarizerClient, defaultSummarizerOpts } from '@/lib/summarizerClient';
 
 let panelHost: HTMLElement | null = null;
 let reactRoot: Root | null = null;
+let currentButton: SelectionButton | null = null; // Keep track of the button instance
 
+// --- React Panel Rendering ---
 function ensureReactRoot(): Root {
   if (reactRoot) return reactRoot;
 
   panelHost = document.createElement("div");
   panelHost.id = "__lb-panel-host__";
-
+  // Apply necessary base styles for the host
   panelHost.style.position = "fixed";
   panelHost.style.top = "0";
   panelHost.style.left = "0";
-  panelHost.style.zIndex = "2147483647";
+  panelHost.style.zIndex = "2147483647"; // Max z-index
+  panelHost.style.pointerEvents = "none"; // Allow clicks to pass through normally
 
   document.body.appendChild(panelHost);
-
   reactRoot = createRoot(panelHost);
   return reactRoot;
 }
 
 function showPanel(
-  content: string,
-  explnation: string,
+  originalText: string, // Keep original text for the 'Add' action
+  content: string,      // This is the Summarizer result (used as Heading in Panel)
+  explanation: string,  // 2. FIX typo: was 'explnation'. This is the Writer result.
   nearRect: DOMRect | null
 ) {
   const root = ensureReactRoot();
 
   const handleClose = () => {
-    root.render(null);
+    root.render(null); // Unmount the component
   };
 
-  const handleAdd = (contentToSave: string, explanationToSave: string) => {
-    // 1. Tell the side panel app what to prefill
+  const handleAdd = () => {
+    // 3. Use the standardized message format
     browser.runtime.sendMessage({
-      type: 'explain-text',
-      text: contentToSave,
-      explanation: explanationToSave,
+      type: 'prefill-and-open-sidepanel',
+      front: originalText,
+      heading: content, // Use summarizer result as heading
+      back: explanation, // Use writer result as back
     });
-
-    // 2. (Optional but nice) ask background to open the side panel
-    // We can't call browser.sidePanel.open(...) directly here in content script
-    // in all Chrome versions, so forward a "open-sidepanel" request to background.
-    browser.runtime.sendMessage({
-      type: 'open-sidepanel',
-    });
-
   };
 
+  // Ensure the panelHost allows pointer events while the panel is shown
+  if (panelHost) panelHost.style.pointerEvents = "auto";
+
+  // Make sure Panel component props match this call
   root.render(
     <Panel
-      content={content}
-      explanation={explnation}
+      content={content}       // Pass summarizer result
+      explanation={explanation} // Pass writer result
       nearRect={nearRect}
       onClose={handleClose}
-      onAdd={handleAdd} 
+      onAdd={handleAdd} // Use the simplified handleAdd
     />
   );
 }
 
+// --- Button Enable/Disable Logic ---
+const setupButton = (isEnabled: boolean) => {
+  if (isEnabled && !currentButton) {
+    console.log('[content] Enabling button');
+    // 4. FIX: Instantiate SelectionButton correctly (assuming its constructor takes no args)
+    // The logic to call AI now happens inside this content script, triggered by the button
+    currentButton = new SelectionButton();
+    currentButton.setOnLearnClick(async (text, rect) => { // 5. Use a callback instead of passing func in constructor
+      // Immediately show a "loading" panel
+      showPanel(text, 'Please Wait', 'Writing…', rect);
+
+      try {
+        // Initialize AI clients concurrently
+        await Promise.all([
+          (async () => {
+            writerClient.setOpts(defaultWriterOpts);
+            await writerClient.initFromUserGesture(defaultWriterOpts);
+          })(),
+          (async () => {
+            summarizerClient.setOpts(defaultSummarizerOpts);
+            await summarizerClient.initFromUserGesture(defaultSummarizerOpts);
+          })(),
+        ]);
+
+        // Run AI calls concurrently
+        const [writerResult, summarizerResult] = await Promise.all([
+           writerClient.write(text, {}),
+           summarizerClient.summarize(text, {})
+        ]);
+
+        // Show the result
+        showPanel(
+          text,
+          summarizerResult || 'Summary',
+          writerResult || 'No output.',
+          rect
+        );
+      } catch (err: any) {
+        console.error('[content] AI error:', err);
+        showPanel(text, 'Error', `${err?.message ?? String(err)}`, rect);
+      }
+    });
+    currentButton.initializeListeners();
+
+  } else if (!isEnabled && currentButton) {
+    console.log('[content] Disabling button');
+    currentButton.destroy();
+    currentButton = null;
+    if (reactRoot) {
+      reactRoot.render(null); // Also close the panel if extension is disabled
+      if (panelHost) panelHost.style.pointerEvents = "none";
+    }
+  }
+};
+
+
+// --- Content Script Definition ---
 export default defineContentScript({
   matches: ['<all_urls>'],
   allFrames: true,
 
-  async main() {
+  main() {
     console.log('[content] loaded on', location.href);
 
-    // Prep writerClient once, so first click feels faster
-    // (Your old code had an initFromUserGesture step which must run on user gesture)
-    // We'll call that lazily at first use below. You can also pre-warm here if allowed.
+    // 6. Setup the button based on initial setting and watch for changes
+    isExtensionEnabled.getValue().then(setupButton);
+    isExtensionEnabled.watch(setupButton);
 
-    // Create the floating Learn button
-    const button = new SelectionButton({
-      onExplainRequested: async (text, rect) => {
-        // 1. Immediately show a "loading" panel near the selection
-        showPanel('Please Wait' ,'Writing…', rect);
+    // --- Listener for Context Menu ---
+    browser.runtime.onMessage.addListener(async (msg) => {
+      // 7. Check if enabled before processing message
+      const isEnabled = await isExtensionEnabled.getValue();
+      if (!isEnabled || msg.type !== 'EXPLAIN_TEXT_FROM_CONTEXT_MENU' || typeof msg.text !== 'string') {
+        return;
+      }
 
-        try {
-          
-          writerClient.setOpts(defaultWriterOpts);
-          await writerClient.initFromUserGesture(defaultWriterOpts);
-          
-          const writerResult = await writerClient.write(text, {});
+      const text = msg.text.trim();
+      if (!text) return;
 
-          summarizerClient.setOpts(defaultSummarizerOpts);
-          await summarizerClient.initFromUserGesture(defaultSummarizerOpts);
-          
-          const summarizerResult = await summarizerClient.summarize(text, {});
+      // Show loading panel (centered)
+      showPanel(text, 'Please Wait', 'Writing…', null);
 
-          // 4. Show the result
-          showPanel(summarizerResult || 'No output.', writerResult || 'No output.', rect);
-        } catch (err: any) {
-          console.error('[content] writer error:', err);
-          showPanel('Error', `${err?.message ?? String(err)}`, rect);
-        }
-      },
-    });
+      try {
+        // Initialize AI (must be inside user gesture - context menu click counts)
+         await Promise.all([
+          (async () => {
+            writerClient.setOpts(defaultWriterOpts);
+            await writerClient.initFromUserGesture(defaultWriterOpts);
+          })(),
+          (async () => {
+            summarizerClient.setOpts(defaultSummarizerOpts);
+            await summarizerClient.initFromUserGesture(defaultSummarizerOpts);
+          })(),
+        ]);
 
-    button.initializeListeners();
+        // Run AI calls
+        const [writerResult, summarizerResult] = await Promise.all([
+           writerClient.write(text, {}),
+           summarizerClient.summarize(text, {})
+        ]);
 
-    // Listen for background context menu path
-    chrome.runtime.onMessage.addListener(async (msg) => {
-      if (
-        msg.type === 'EXPLAIN_TEXT_FROM_CONTEXT_MENU' &&
-        typeof msg.text === 'string'
-      ) {
-        const text = msg.text.trim();
-        if (!text) return;
-
-        // For context menu we don't have a selection rect in-page,
-        // so pass null to dock panel bottom-right.
-        showPanel('Please Wait', 'Writing…', null);
-
-        try {
-          writerClient.setOpts(defaultWriterOpts);
-          await writerClient.initFromUserGesture(defaultWriterOpts);
-
-          const writerResult = await writerClient.write(text, {});
-          
-          summarizerClient.setOpts(defaultSummarizerOpts);
-          await summarizerClient.initFromUserGesture(defaultSummarizerOpts);
-          
-          const summarizerResult = await summarizerClient.summarize(text, {});
-          
-          showPanel(summarizerResult || 'No output.' , writerResult || 'No output.', null);
-        } catch (err: any) {
-          console.error('[content] writer error (from context menu):', err);
-          showPanel('Error', `${err?.message ?? String(err)}`, null);
-        }
+        // Show result panel (centered)
+        showPanel(
+          text,
+          summarizerResult || 'Summary',
+          writerResult || 'No output.',
+          null
+        );
+      } catch (err: any) {
+        console.error('[content] AI error (from context menu):', err);
+        showPanel(text, 'Error', `${err?.message ?? String(err)}`, null);
       }
     });
   },
 });
+
+// --- Helper type definition for SelectionButton (assuming it needs setOnLearnClick) ---
+// You might need to adjust SelectionButton.ts to match this
+declare module '@/lib/SelectionButton' {
+  interface SelectionButton {
+    setOnLearnClick(callback: (text: string, rect: DOMRect | null) => Promise<void>): void;
+  }
+}

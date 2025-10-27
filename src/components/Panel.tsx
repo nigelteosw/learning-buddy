@@ -5,7 +5,7 @@ export type PanelProps = {
   content: string;
   explanation: string;
   onClose: () => void;
-  onAdd: (content: string, explanation: string) => void;
+  onAdd: () => void; // 1. CHANGE: No arguments needed
   nearRect?: DOMRect | null;
 };
 
@@ -147,9 +147,7 @@ export const Panel: React.FC<PanelProps> = ({
         {/* Actions */}
         <div id="lb-panel-header-actions">
           <button
-            onClick={() => {
-              onAdd(content, explanation);
-            }}
+            onClick={onAdd}
           >
             Add
           </button>

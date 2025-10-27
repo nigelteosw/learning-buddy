@@ -4,7 +4,7 @@ import { db, Card } from '@/lib/db';
 type AddCardFormProps = {
   initialFrontText: string;
   initialHighlight: string;
-  initialBackText: string; // explanation from panel
+  initialPrefillData: { heading: string; back: string } | null;
   onCardSaved: () => void;
   cardToEdit: Card | null;
 };
@@ -12,41 +12,42 @@ type AddCardFormProps = {
 export function AddCardForm({
   initialFrontText,
   initialHighlight,
-  initialBackText,
+  initialPrefillData,
   onCardSaved,
   cardToEdit,
 }: AddCardFormProps) {
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
-  const [concept, setConcept] = useState('');
+  const [heading, setHeading] = useState(''); // Correct state name
 
-  // hydrate form values anytime we:
-  // - switch into edit mode for a card
-  // - or receive new data from the floating panel (front/back text)
   useEffect(() => {
     if (cardToEdit) {
       // EDIT MODE: load the existing card
-      setConcept(cardToEdit.concept ?? '');
+      setHeading(cardToEdit.concept ?? ''); // Use heading field from Card
       setFrontText(cardToEdit.front ?? '');
       setBackText(cardToEdit.back ?? '');
+    } else if (initialPrefillData) {
+      // PREFILL MODE: Coming from floating panel
+      setHeading('');
+      setFrontText(initialPrefillData.heading || ''); // Use initialFrontText passed from App
+      setBackText(initialPrefillData.back || '');
     } else {
-      // ADD MODE: coming from highlight + AI explanation
-      // Fill the "Original Text (Front)" with highlight or summary
+      // ADD MODE: Coming from direct highlight or manual entry
       setFrontText(initialFrontText || initialHighlight || '');
-      // Fill the "Explanation (Back)" with the AI explanation
-      setBackText(initialBackText || '');
-      // Heading/Concept starts empty for new cards
-      setConcept('');
+      setBackText('');
+      setHeading('');
     }
   }, [
     cardToEdit,
     initialFrontText,
     initialHighlight,
-    initialBackText, // ✅ include this so it updates when you click Add again
+    initialPrefillData,
   ]);
 
+  // --- THIS FUNCTION IS FIXED ---
   const handleSaveCard = async () => {
-    if (!concept || !frontText || !backText) {
+    // Use 'heading' state variable
+    if (!heading || !frontText || !backText) {
       alert('Please fill out all fields.');
       return;
     }
@@ -55,7 +56,7 @@ export function AddCardForm({
       if (cardToEdit) {
         // UPDATE EXISTING CARD
         await db.cards.update(cardToEdit.id!, {
-          concept,
+          concept: heading, // FIX: Use heading state
           front: frontText,
           back: backText,
         });
@@ -63,7 +64,7 @@ export function AddCardForm({
       } else {
         // CREATE NEW CARD
         const newCard: Card = {
-          concept,
+          concept: heading, // FIX: Use heading state
           front: frontText,
           back: backText,
           createdAt: new Date(),
@@ -81,12 +82,15 @@ export function AddCardForm({
       alert('Failed to save card.');
     }
   };
+  // --- END OF FIX ---
+
 
   const buttonText = cardToEdit ? 'Update Card' : 'Save Card';
   const buttonColor = cardToEdit
     ? 'bg-blue-600 hover:bg-blue-500'
     : 'bg-green-600 hover:bg-green-500';
 
+  // --- JSX (ensure input uses 'heading' state) ---
   return (
     <div className="space-y-4">
       <div className="space-y-3 rounded-lg border border-zinc-700 p-3">
@@ -101,14 +105,15 @@ export function AddCardForm({
           <input
             id="heading"
             type="text"
-            value={concept}
-            onChange={(e) => setConcept(e.target.value)}
+            value={heading} // Correctly uses heading state
+            onChange={(e) => setHeading(e.target.value)} // Correctly uses setHeading
             placeholder="e.g., 'Kalman Filters'"
             className="block w-full rounded-md border border-zinc-600 bg-zinc-800 p-2 text-white placeholder-zinc-500"
           />
         </div>
 
-        {/* Front */}
+        {/* ... (Rest of JSX is likely correct) ... */}
+         {/* Front */}
         <div>
           <label
             htmlFor="frontText"
@@ -116,13 +121,11 @@ export function AddCardForm({
           >
             Original Text (Front)
           </label>
-
-          {!cardToEdit && initialHighlight && (
-            <p className="mb-2 text-xs text-zinc-500">
-              Pre-filled from highlight. You can edit it.
-            </p>
+          {!cardToEdit && (initialHighlight || initialPrefillData) && (
+             <p className="mb-2 text-xs text-zinc-500">
+               Pre-filled. You can edit it.
+             </p>
           )}
-
           <textarea
             id="frontText"
             value={frontText}
@@ -158,6 +161,7 @@ export function AddCardForm({
         >
           {buttonText}
         </button>
+
       </div>
     </div>
   );

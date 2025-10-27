@@ -6,45 +6,72 @@ import { ReviewList } from '@/components/ReviewList';
 
 function App() {
   const [frontText, setFrontText] = useState('');
-  const [backText, setBackText] = useState('');
+  // REMOVED: const [backText, setBackText] = useState(''); // State is now in AddCardForm
   const [originalHighlight, setOriginalHighlight] = useState('');
   const [activeTab, setActiveTab] = useState<'addCard' | 'review'>('addCard');
-  
-  // 2. Add state to hold the card being edited
   const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
+
+  // State to hold prefill data from the floating panel
+  const [initialPrefillData, setInitialPrefillData] = useState<{ heading: string; back: string } | null>(null);
 
   const cardCount = useLiveQuery(() => db.cards.count(), [], 0);
 
-  // 3. Update message listener to clear 'cardToEdit'
+  // Update message listener
   useEffect(() => {
     const messageListener = (message: any) => {
+      console.log('App received message:', message);
+
+      // Handles highlight coming *directly* from content script (if you still have that flow)
       if (message.type === 'explain-text' && message.text) {
+        console.log('App received explain-text:', message.text);
         setOriginalHighlight(message.text);
         setFrontText(message.text);
-        setBackText(message.explanation || '');
-        setCardToEdit(null); // Clear any active edit
+        setCardToEdit(null);
+        setInitialPrefillData(null); // Clear prefill if new highlight comes
         setActiveTab('addCard');
       }
+
+      // Handles 'show-review' from popup
+      if (message.type === 'show-review') {
+        console.log('App received show-review');
+        setActiveTab('review');
+      }
+
+      // --- ADDED: Handles prefill data forwarded from background script ---
+      if (message.type === 'prefill-data' && message.data) {
+        console.log('App received prefill-data:', message.data);
+        setFrontText(message.data.front);         // Set front text for the form
+        setOriginalHighlight(message.data.front); // Set the original highlight context
+        setCardToEdit(null);                      // Ensure not in edit mode
+        setInitialPrefillData({                   // Set initial heading and back
+            heading: message.data.heading,
+            back: message.data.back
+        });
+        setActiveTab('addCard');                  // Switch to the form
+      }
+      // --- END OF ADDITION ---
     };
+
     browser.runtime.onMessage.addListener(messageListener);
     return () => {
       browser.runtime.onMessage.removeListener(messageListener);
     };
   }, []);
 
-  // 4. Update this callback to ALSO clear 'cardToEdit'
+  // Update this callback to ALSO clear 'cardToEdit' and 'initialPrefillData'
   const handleCardSaved = () => {
     setOriginalHighlight('');
     setFrontText('');
-    setBackText('');
-    setCardToEdit(null); // Clear the edited card
+    setInitialPrefillData(null); // Clear prefill data after save/update
+    setCardToEdit(null);
     setActiveTab('review');
   };
-  
-  // 5. Create a handler for when 'Edit' is clicked
+
+  // Handler for when 'Edit' is clicked (Unchanged)
   const handleEditRequest = (card: Card) => {
     setCardToEdit(card);
-    setActiveTab('addCard'); // Switch to the form
+    setInitialPrefillData(null); // Clear any prefill data when editing
+    setActiveTab('addCard'); 
   };
 
   return (
@@ -58,17 +85,17 @@ function App() {
               : 'text-zinc-400'
           }`}
           onClick={() => {
-            setCardToEdit(null); // Clear edit mode if tab is clicked
-            setFrontText(''); // Clear highlight
+            setCardToEdit(null);
+            setFrontText('');
             setOriginalHighlight('');
+            setInitialPrefillData(null); // Clear prefill when switching manually
             setActiveTab('addCard');
           }}
         >
-          {/* Change tab text based on mode */}
           {cardToEdit ? 'Edit Card' : 'Add Card'}
         </button>
         <button
-          className={`px-4 py-2 text-sm ${
+           className={`px-4 py-2 text-sm ${
             activeTab === 'review'
               ? 'border-b-2 border-blue-500 text-white'
               : 'text-zinc-400'
@@ -84,15 +111,15 @@ function App() {
         <AddCardForm
           initialFrontText={frontText}
           initialHighlight={originalHighlight}
-          initialBackText={backText}  
+          // Pass the prefill data down
+          initialPrefillData={initialPrefillData}
           onCardSaved={handleCardSaved}
-          cardToEdit={cardToEdit} // 6. Pass the card to the form
+          cardToEdit={cardToEdit}
         />
       )}
 
       {/* --- REVIEW TAB --- */}
       {activeTab === 'review' && (
-        // 7. Pass the edit handler to the list
         <ReviewList onEditRequest={handleEditRequest} />
       )}
     </main>
