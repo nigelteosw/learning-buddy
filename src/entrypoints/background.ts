@@ -4,6 +4,7 @@ export default defineBackground(() => {
   // --- Listener for messages from Content Script ---
   browser.runtime.onMessage.addListener(async (message, sender) => {
     // Check if the message is from your content script asking to prefill
+    console.log('[bg] Received message:', message);
     if (message.type === 'prefill-and-open-sidepanel' && sender.tab?.id) {
       try {
         // 1. Open the side panel for the tab that sent the message

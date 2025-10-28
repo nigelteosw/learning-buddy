@@ -3,7 +3,7 @@ import { db, Card } from '@/lib/db'; // 1. Import Card type
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AddCardForm } from '@/components/AddCardForm';
 import { ReviewList } from '@/components/ReviewList'; // Remove this
-import { ReviewGame } from '@/components/ReviewGame'; // Keep this
+import { ReviewGame } from '@/components/reviewgame/ReviewGame'; // Keep this
 
 function App() {
   const [frontText, setFrontText] = useState('');
