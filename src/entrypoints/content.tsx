@@ -4,8 +4,9 @@ import { createRoot, Root } from 'react-dom/client';
 import { Panel } from '@/components/Panel'; // Ensure Panel accepts stream props
 import { SelectionButton } from '@/lib/SelectionButton';
 import { isExtensionEnabled } from '@/lib/settings';
-import { writerClient, defaultWriterOpts } from '@/lib/writerClient';
-import { summarizerClient, defaultSummarizerOpts } from '@/lib/summarizerClient';
+import { writerClient, defaultWriterOpts } from '@/lib/modelClients/writerClient';
+import { summarizerClient, defaultSummarizerOpts } from '@/lib/modelClients/summarizerClient';
+import { promptClient, defaultPromptOpts } from '@/lib/modelClients/promptClient';
 
 
 let panelHost: HTMLElement | null = null;
@@ -176,6 +177,11 @@ const setupButton = (isEnabled: boolean) => {
         });
         console.log("[content] Writer client initialized.");
 
+        promptClient.setOpts(defaultPromptOpts);
+        await promptClient.initFromUserGesture({
+          ...defaultPromptOpts,
+        });
+        console.log("[content] Prompt client initialized.");
         
         // --- Get Streams and Pass Them Down ---
         showPanel(text, 'Please Wait', 'Generating...', rect); // Update status
