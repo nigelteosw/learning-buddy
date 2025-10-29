@@ -24,9 +24,9 @@ interface WriterSession {
     opts?: { signal?: AbortSignal; context?: string }
   ): Promise<string>;
   writeStreaming(
-   text: string,
+    text: string,
     opts?: { signal?: AbortSignal; context?: string }
-  ): Promise<string>;
+  ): AsyncIterable<string>;
   destroy(): void;
 }
 
@@ -74,7 +74,7 @@ export const defaultWriterOpts: GlobalWriterOpts = {
   tone: "casual",
   format: "plain-text",
   length: "medium",
-  outputLanguage: getDefaultLanguage(), // Much cleaner
+  outputLanguage: getDefaultLanguage(), 
 };
 
 type CreateParams = Partial<GlobalWriterOpts> & {
@@ -99,19 +99,8 @@ class WriterClient {
       return;
     }
 
-    // Use self.Writer directly, thanks to `declare global`
     if (!self.Writer) {
       throw new Error("Web Writer API not available in this context.");
-    }
-
-    try {
-      const availability = await self.Writer.availability?.();
-      if (availability === "unavailable") {
-        throw new Error("Writer unavailable.");
-      }
-    } catch (e) {
-      // Don't throw, just warn. Let create() be the final source of failure.
-      console.warn("Error checking Writer availability:", e);
     }
 
     // --- 5. Simplify Options Merging ---
@@ -123,7 +112,6 @@ class WriterClient {
       length: finalOpts.length,
       sharedContext: finalOpts.sharedContext,
       monitor: (m: EventTarget) => {
-        // <-- CORRECTED: 'm' is EventTarget
         if (params?.onDownloadProgress) {
           m.addEventListener("downloadprogress", (e) =>
             params.onDownloadProgress?.(
@@ -135,7 +123,7 @@ class WriterClient {
     };
 
     this.creating = self
-      .Writer!.create(createOpts)
+      .Writer!.create(createOpts) 
       .then((s: WriterSession) => {
         this.session = s;
         return s;
@@ -167,23 +155,66 @@ class WriterClient {
     });
   }
 
+  /**
+   * Calls the underlying session's writeStreaming method.
+   * Returns an async iterable stream of text chunks.
+   */
   async writeStreaming(
     text: string,
     { signal, context }: { signal?: AbortSignal; context?: string } = {}
-  ) {
+  ): Promise<AsyncIterable<string>> { // Return type matches interface
     if (!this.session) {
       throw new Error(
         "Writer not initialized. Call initFromUserGesture() on a user click first."
       );
     }
     const input = text.trim().replace(/\s+/g, " ");
-    if (!input) return "";
+    if (!input) {
+      // Return an empty async iterable if input is empty
+      async function* emptyGenerator(): AsyncIterable<string> {}
+      return emptyGenerator();
+    }
 
-    // Type casting is no longer needed, session.write is typed
-    return await this.session.writeStreaming(input, {
+    // Call the session's streaming method and return the stream directly
+    // Note: This method itself might not need to be async if it just returns the iterable
+    // but keeping it async allows for potential future checks.
+    return this.session.writeStreaming(input, {
       signal,
       context,
     });
+  }
+
+  async availability(): Promise<
+    'available' | 'downloadable' | 'downloading' | 'unavailable' | 'unknown' | 'no-api'
+  > {
+    // 1. Check if the main Writer API exists
+    if (!self.Writer) {
+      console.warn("Writer API not found on self.");
+      return 'no-api';
+    }
+    // 2. Check if the specific availability method exists
+    if (!self.Writer.availability) {
+       console.warn("Writer.availability() method not found.");
+       // If the main API exists but availability doesn't, assume it might be available
+       // but we can't be sure about downloading state.
+       return 'unknown';
+    }
+
+    // 3. Call the browser's availability function
+    try {
+      const state = await self.Writer.availability();
+      // The official docs mention 'available', 'downloadable', 'downloading'.
+      // Add 'unavailable' and 'unknown' as likely possibilities.
+      // Explicitly check for expected values.
+      if (['available', 'downloadable', 'downloading', 'unavailable', 'unknown'].includes(state)) {
+         return state as 'available' | 'downloadable' | 'downloading' | 'unavailable' | 'unknown';
+      }
+      console.warn("Writer.availability() returned unexpected state:", state);
+      return 'unknown';
+    } catch (e) {
+      console.error("Error calling Writer.availability():", e);
+      return 'unavailable'; // Treat errors as unavailable
+    }
   }
 
   dispose() {
