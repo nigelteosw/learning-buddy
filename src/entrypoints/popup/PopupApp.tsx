@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '@/lib/db';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { isExtensionEnabled } from '@/lib/settings'; // 1. Import your new setting
+import React, { useState, useEffect } from "react";
+import { db } from "@/lib/db";
+import { useLiveQuery } from "dexie-react-hooks";
+import { isExtensionEnabled } from "@/lib/settings"; // 1. Import your new setting
 
 function PopupApp() {
   const cardCount = useLiveQuery(() => db.cards.count(), [], 0);
@@ -29,9 +29,85 @@ function PopupApp() {
     await isExtensionEnabled.setValue(newState);
   };
 
-  // ... (handleOpenPanel and handleOpenReview are unchanged) ...
-  const handleOpenPanel = async () => { /* ... */ };
-  const handleOpenReview = async () => { /* ... */ };
+  const handleOpenPanel = async () => {
+    try {
+      const [activeTab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (activeTab?.id) {
+        await browser.sidePanel.open({ tabId: activeTab.id });
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        console.log("Popup sending show-add-card message...");
+        await browser.runtime.sendMessage({ type: "show-add-card" });
+      } else {
+        console.warn("Could not find active tab to open side panel for.");
+
+        const currentWindow = await browser.windows.getCurrent();
+        if (currentWindow.id) {
+          await browser.sidePanel.open({ windowId: currentWindow.id });
+          await new Promise((resolve) => setTimeout(resolve, 100)); // Add delay here too
+          await browser.runtime.sendMessage({ type: "show-add-card" });
+        }
+      }
+    } catch (e) {
+      console.error("Error opening side panel:", e);
+    }
+    window.close();
+  };
+
+  /**
+   * Opens the side panel for the current active tab and sends a message
+   * instructing it to switch to the 'review' view.
+   */
+  const handleOpenReview = async () => {
+    try {
+      const [activeTab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      if (activeTab?.id) {
+        // --- Option 1: Open by Tab ID ---
+        await browser.sidePanel.open({ tabId: activeTab.id });
+      } else {
+        // --- Option 2: Fallback to Window ID ---
+        console.warn(
+          "handleOpenReview: Could not find active tab. Falling back to current window."
+        );
+        try {
+          const currentWindow = await browser.windows.getCurrent();
+          if (currentWindow.id !== undefined) {
+            // Check if ID is defined
+            // Explicitly use windowId, which is now guaranteed to be a number
+            await browser.sidePanel.open({ windowId: currentWindow.id });
+          } else {
+            // If both fail, log an error and exit
+            console.error("handleOpenReview: Failed to get current window ID.");
+            window.close();
+            return;
+          }
+        } catch (windowError) {
+          console.error(
+            "handleOpenReview: Failed to get current window:",
+            windowError
+          );
+          window.close();
+          return;
+        }
+      }
+
+      // --- Send Message (only if panel was opened successfully) ---
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await browser.runtime.sendMessage({ type: "show-review" });
+    } catch (error) {
+      console.error("handleOpenReview: Unexpected error:", error);
+    } finally {
+      window.close();
+    }
+  };
 
   return (
     <main className="w-48 space-y-3 bg-zinc-900 p-3 font-sans text-white">
@@ -43,17 +119,17 @@ function PopupApp() {
           role="switch"
           aria-checked={isEnabled}
           className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-            isEnabled ? 'bg-blue-600' : 'bg-zinc-700'
+            isEnabled ? "bg-blue-600" : "bg-zinc-700"
           }`}
         >
           <span
             className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-              isEnabled ? 'translate-x-5' : 'translate-x-0'
+              isEnabled ? "translate-x-5" : "translate-x-0"
             }`}
           />
         </button>
       </div>
-      
+
       {/* 6. Conditionally render the main controls */}
       {isEnabled ? (
         <>

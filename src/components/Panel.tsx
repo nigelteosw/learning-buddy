@@ -2,19 +2,23 @@ import React, { useEffect, useRef, useState } from "react";
 import './Panel.css';
 
 export type PanelProps = {
-  content: string;
-  explanation: string;
   onClose: () => void;
-  onAdd: () => void; // 1. CHANGE: No arguments needed
+  onAdd: (content: string, explanation: string) => void; // Pass final state back
   nearRect?: DOMRect | null;
+  initialContent: string; // Starting value before stream
+  initialExplanation: string; // Starting value before stream
+  contentStream?: AsyncIterable<string>;      // Optional: Stream for summary
+  explanationStream?: AsyncIterable<string>; // Optional: Stream for writer
 };
 
 export const Panel: React.FC<PanelProps> = ({
-  content,
-  explanation,
   onClose,
   onAdd,
   nearRect,
+  initialContent,
+  initialExplanation,
+  contentStream,      // Get the stream props
+  explanationStream,  // Get the stream props
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -24,6 +28,9 @@ export const Panel: React.FC<PanelProps> = ({
     origTop: number;
     origLeft: number;
   } | null>(null);
+
+  const [currentContent, setCurrentContent] = useState(initialContent);
+  const [currentExplanation, setCurrentExplanation] = useState(initialExplanation);
 
   // --- Initial positioning in VIEWPORT space ---
   useEffect(() => {
@@ -116,10 +123,66 @@ export const Panel: React.FC<PanelProps> = ({
         transform: "translate(-50%, -50%)",
       };
 
+  // --- 3. Add useEffect Hooks to consume streams ---
+  useEffect(() => {
+    if (!contentStream) {
+      // If no stream is provided, ensure state reflects initial prop
+      setCurrentContent(initialContent);
+      return;
+    }
+    let isActive = true;
+    setCurrentContent(''); // Reset for stream
+
+    const processStream = async () => {
+      try {
+        for await (const chunk of contentStream) {
+          if (!isActive) break;
+          setCurrentContent(prev => prev + chunk);
+        }
+        // Set default if stream finishes empty
+        if (isActive) {
+           setCurrentContent(prev => prev || 'Summary');
+        }
+      } catch (error) {
+         if (isActive) setCurrentContent('Error summarizing.');
+         console.error("Error processing content stream:", error);
+      }
+    };
+    processStream();
+    return () => { isActive = false; };
+  }, [contentStream, initialContent]); // Re-run if stream or initial value changes
+
+  useEffect(() => {
+    if (!explanationStream) {
+      // If no stream is provided, ensure state reflects initial prop
+      setCurrentExplanation(initialExplanation);
+      return;
+    }
+    let isActive = true;
+    setCurrentExplanation(''); // Reset for stream
+
+    const processStream = async () => {
+      try {
+        for await (const chunk of explanationStream) {
+          if (!isActive) break;
+          setCurrentExplanation(prev => prev + chunk);
+        }
+        // Set default if stream finishes empty
+        if (isActive) {
+           setCurrentExplanation(prev => prev || 'No output.');
+        }
+      } catch (error) {
+         if (isActive) setCurrentExplanation('Error generating explanation.');
+         console.error("Error processing explanation stream:", error);
+      }
+    };
+    processStream();
+    return () => { isActive = false; };
+  }, [explanationStream, initialExplanation]);
+
   return (
     <div
       ref={ref}
-      // 3. APPLY the main ID
       id="lb-panel"
       style={{
         ...dynamicStyle,
@@ -129,29 +192,25 @@ export const Panel: React.FC<PanelProps> = ({
       {/* HEADER */}
       <div
         onMouseDown={startDrag}
-        // 4. APPLY header ID and handle cursor dynamically
         id="lb-panel-header"
         style={{
           cursor: drag ? "grabbing" : "grab",
         }}
       >
-        {/* Title + subtitle */}
-        {/* 5. APPLY nested element IDs */}
+        {/* Title */}
         <div id="lb-panel-header-title">
-          <div id="lb-panel-header-title-main">
-            Learning Buddy
-          </div>
+          <div id="lb-panel-header-title-main">Learning Buddy</div>
           <div id="lb-panel-header-title-sub">AI explanation panel</div>
         </div>
 
         {/* Actions */}
         <div id="lb-panel-header-actions">
+          {/* 5. Update onAdd call */}
           <button
-            onClick={onAdd}
+            onClick={() => onAdd(currentContent, currentExplanation)} // Pass current state
           >
             Add
           </button>
-
           <button onClick={onClose}>
             Close
           </button>
@@ -159,15 +218,15 @@ export const Panel: React.FC<PanelProps> = ({
       </div>
 
       {/* content */}
-      {/* 6. APPLY content heading ID */}
+      {/* 4. Render State */}
       <div id="lb-panel-content-heading">
-        {content}
+        {currentContent}
       </div>
 
       {/* Body */}
-      {/* 7. APPLY body ID */}
+      {/* 4. Render State */}
       <div id="lb-panel-body">
-        {explanation}
+        {currentExplanation}
       </div>
     </div>
   );

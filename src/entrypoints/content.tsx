@@ -1,23 +1,16 @@
-import React from "react";
-import { createRoot, Root } from "react-dom/client";
-import { Panel } from "@/components/Panel";
-import { SelectionButton } from "@/lib/SelectionButton"; // Ensure this class exists and is correct
-import { isExtensionEnabled } from "@/lib/settings";
+// src/entrypoints/content.tsx
+import React from 'react';
+import { createRoot, Root } from 'react-dom/client';
+import { Panel } from '@/components/Panel'; // Ensure Panel accepts stream props
+import { SelectionButton } from '@/lib/SelectionButton';
+import { isExtensionEnabled } from '@/lib/settings';
+import { writerClient, defaultWriterOpts } from '@/lib/writerClient';
+import { summarizerClient, defaultSummarizerOpts } from '@/lib/summarizerClient';
 
-// 1. REMOVE the dangerous Tailwind import
-// import '@/assets/tailwind.css'
-// Make sure Panel.tsx imports its own scoped Panel.css if needed
-
-import { writerClient, defaultWriterOpts } from "@/lib/writerClient";
-import {
-  summarizerClient,
-  defaultSummarizerOpts,
-} from "@/lib/summarizerClient";
 
 let panelHost: HTMLElement | null = null;
 let reactRoot: Root | null = null;
-let currentButton: SelectionButton | null = null; // Keep track of the button instance
-let downloadProgress = { writer: -1, summarizer: -1 };
+let currentButton: SelectionButton | null = null;
 
 // --- React Panel Rendering ---
 function ensureReactRoot(): Root {
@@ -38,38 +31,38 @@ function ensureReactRoot(): Root {
 }
 
 function showPanel(
-  originalText: string, // Keep original text for the 'Add' action
-  content: string, // This is the Summarizer result (used as Heading in Panel)
-  explanation: string, // 2. FIX typo: was 'explnation'. This is the Writer result.
-  nearRect: DOMRect | null
+  originalText: string,
+  initialContent: string,
+  initialExplanation: string,
+  nearRect: DOMRect | null,
+  // Add optional stream props
+  contentStream?: AsyncIterable<string>,
+  explanationStream?: AsyncIterable<string>
 ) {
   const root = ensureReactRoot();
-
-  const handleClose = () => {
-    root.render(null); // Unmount the component
-  };
-
-  const handleAdd = () => {
-    // 3. Use the standardized message format
+  const handleClose = () => { root.render(null); };
+  const handleAdd = (finalContent: string, finalExplanation: string) => {
     browser.runtime.sendMessage({
-      type: "prefill-and-open-sidepanel",
+      type: 'prefill-and-open-sidepanel',
       front: originalText,
-      heading: content, // Use summarizer result as heading
-      back: explanation, // Use writer result as back
+      heading: finalContent,
+      back: finalExplanation,
     });
+    handleClose();
   };
 
-  // Ensure the panelHost allows pointer events while the panel is shown
   if (panelHost) panelHost.style.pointerEvents = "auto";
 
-  // Make sure Panel component props match this call
+  // Pass streams down to the Panel component
   root.render(
     <Panel
-      content={content} // Pass summarizer result
-      explanation={explanation} // Pass writer result
+      initialContent={initialContent}
+      initialExplanation={initialExplanation}
+      contentStream={contentStream}           // Pass stream
+      explanationStream={explanationStream}   // Pass stream
       nearRect={nearRect}
       onClose={handleClose}
-      onAdd={handleAdd} // Use the simplified handleAdd
+      onAdd={handleAdd}
     />
   );
 }
@@ -77,17 +70,19 @@ function showPanel(
 // --- Button Enable/Disable Logic ---
 const setupButton = (isEnabled: boolean) => {
   if (isEnabled && !currentButton) {
-    console.log("[content] Enabling button");
+    console.log('[content] Enabling button');
     currentButton = new SelectionButton();
 
     currentButton.setOnLearnClick(async (text, rect) => {
-      downloadProgress = { writer: -1, summarizer: -1 };
+      // Show initial loading panel (no streams yet)
+      let downloadProgress = { writer: -1, summarizer: -1 };
       let writerAvailable = "unknown",
         summarizerAvailable = "unknown";
 
       showPanel(text, "Please Wait", "Checking AI...", rect);
 
       try {
+        // --- Availability Check (Keep as is) ---
         [writerAvailable, summarizerAvailable] = await Promise.all([
           writerClient.availability(),
           summarizerClient.availability(),
@@ -180,69 +175,33 @@ const setupButton = (isEnabled: boolean) => {
         });
         console.log("[content] Summarizer client initialized.");
 
-        // --- Run AI calls ---
-        showPanel(text, "Please Wait", "Generating...", rect); // Initial status
-        let streamedWriter = "";
-        let streamedSummarizer = "";
-        let summarizerFinished = false; // Flag to track when summarizer is done
+        // --- Get Streams and Pass Them Down ---
+        showPanel(text, 'Please Wait', 'Generating...', rect); // Update status
 
-        try {
-          // Start both streaming calls concurrently
-          const summarizerStream = await summarizerClient.summarizeStreaming(
+        // Get the streams WITHOUT consuming them here
+        const summarizerStream = await summarizerClient.summarizeStreaming(text, {});
+        const writerStream = await writerClient.writeStreaming(text, {});
+        
+        console.log("[content] Got AI streams.");
+
+        // Re-render the panel, passing the streams down
+        // The Panel component will handle consuming them via useEffect
+        showPanel(
             text,
-            {}
-          );
-          const writerStream = await writerClient.writeStreaming(text, {});
+            '',               // Start with empty summary
+            '',               // Start with empty explanation
+            rect,
+            summarizerStream, // Pass the summarizer stream
+            writerStream      // Pass the writer stream
+        );
+        // --- End Stream Passing ---
 
-          const summarizerPromise = (async () => {
-            for await (const chunk of summarizerStream) {
-              streamedSummarizer += chunk;
-              // Update panel with latest summary chunk, using current writer state
-              // (Don't constantly overwrite the writer's streaming output)
-              // Only update the 'heading' part if needed, maybe just log progress
-              console.log("Summarizer chunk:", chunk); // Log progress
-              // Optionally update panel title briefly if needed:
-              // showPanel(text, streamedSummarizer, streamedWriter, rect);
-            }
-            summarizerFinished = true; // Set flag when done
-          })(); // Immediately invoked async function
-
-          // Create promises to track when each stream finishes
-          const writerPromise = (async () => {
-            for await (const chunk of writerStream) {
-              streamedWriter += chunk;
-              // Update panel with latest writer chunk, using current summary state
-              showPanel(
-                text,
-                summarizerFinished
-                  ? streamedSummarizer || "Summary"
-                  : "Summarizing...", // Show placeholder if summary not done
-                streamedWriter,
-                rect
-              );
-            }
-          })(); // Immediately invoked async function
-
-          // Wait for both streams to complete
-          await Promise.all([writerPromise, summarizerPromise]);
-          console.log("[content] Both AI streams complete.");
-
-          // Final update with complete results
-          showPanel(
-            text,
-            streamedSummarizer || "Summary",
-            streamedWriter || "No output.",
-            rect
-          );
-        } catch (err: any) {
-          console.error("[content] AI streaming error:", err);
-          showPanel(text, "Error", `${err?.message ?? String(err)}`, rect);
-        }
       } catch (err: any) {
-        console.error("[content] AI error:", err);
-        showPanel(text, "Error", `${err?.message ?? String(err)}`, rect);
+        console.error('[content] AI error:', err);
+        // Render panel in error state (no streams)
+        showPanel(text, 'Error', `${err?.message ?? String(err)}`, rect);
       }
-    });
+    }); // End setOnLearnClick
 
     currentButton.initializeListeners();
   } else if (!isEnabled && currentButton) {
@@ -258,67 +217,56 @@ const setupButton = (isEnabled: boolean) => {
 
 // --- Content Script Definition ---
 export default defineContentScript({
-  matches: ["<all_urls>"],
+  matches: ['<all_urls>'],
   allFrames: true,
-
   main() {
-    console.log("[content] loaded on", location.href);
-
-    // 6. Setup the button based on initial setting and watch for changes
+    console.log('[content] loaded on', location.href);
     isExtensionEnabled.getValue().then(setupButton);
     isExtensionEnabled.watch(setupButton);
 
-    // --- Listener for Context Menu ---
     browser.runtime.onMessage.addListener(async (msg) => {
-      // 7. Check if enabled before processing message
       const isEnabled = await isExtensionEnabled.getValue();
-      if (
-        !isEnabled ||
-        msg.type !== "EXPLAIN_TEXT_FROM_CONTEXT_MENU" ||
-        typeof msg.text !== "string"
-      ) {
-        return;
-      }
+      // ... (Check message validity - unchanged) ...
+       if (!isEnabled || msg.type !== 'EXPLAIN_TEXT_FROM_CONTEXT_MENU' || typeof msg.text !== 'string') return;
+       const text = msg.text.trim();
+       if (!text) return;
 
-      const text = msg.text.trim();
-      if (!text) return;
 
-      // Show loading panel (centered)
-      showPanel(text, "Please Wait", "Writing…", null);
+      // Show initial loading panel (centered, no streams yet)
+      showPanel(text, 'Please Wait', 'Initializing AI...', null);
 
       try {
-        // Initialize AI (must be inside user gesture - context menu click counts)
-        await Promise.all([
-          (async () => {
-            writerClient.setOpts(defaultWriterOpts);
-            await writerClient.initFromUserGesture(defaultWriterOpts);
-          })(),
-          (async () => {
-            summarizerClient.setOpts(defaultSummarizerOpts);
-            await summarizerClient.initFromUserGesture(defaultSummarizerOpts);
-          })(),
+        // --- Initialize (Keep sequential or concurrent as needed for context menu) ---
+        // Context menu click IS a user gesture, so init should work. Concurrent might be okay here.
+         await Promise.all([
+          writerClient.initFromUserGesture(defaultWriterOpts),
+          summarizerClient.initFromUserGesture(defaultSummarizerOpts),
         ]);
 
-        // Run AI calls
-        const [writerResult, summarizerResult] = await Promise.all([
-          writerClient.write(text, {}),
-          summarizerClient.summarize(text, {}),
-        ]);
+        // --- Get Streams and Pass Them Down ---
+        showPanel(text, 'Please Wait', 'Generating...', null); // Update status
 
-        // Show result panel (centered)
+        const writerStream = await writerClient.writeStreaming(text, {});
+        const summarizerStream = await summarizerClient.summarizeStreaming(text, {});
+        console.log("[content] Got AI streams (from context menu).");
+
+        // Re-render panel with streams (centered)
         showPanel(
-          text,
-          summarizerResult || "Summary",
-          writerResult || "No output.",
-          null
+            text,
+            '', '', // Start empty
+            null, // Centered
+            summarizerStream,
+            writerStream
         );
+        // --- End Stream Passing ---
+
       } catch (err: any) {
-        console.error("[content] AI error (from context menu):", err);
-        showPanel(text, "Error", `${err?.message ?? String(err)}`, null);
+        console.error('[content] AI error (from context menu):', err);
+        showPanel(text, 'Error', `${err?.message ?? String(err)}`, null);
       }
-    });
-  },
-});
+    }); // End listener
+  }, // End main
+}); // End defineContentScript
 
 // --- Helper type definition for SelectionButton (assuming it needs setOnLearnClick) ---
 // You might need to adjust SelectionButton.ts to match this

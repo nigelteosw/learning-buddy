@@ -1,70 +1,25 @@
 // --- 1. Define the (hypothetical) Writer API Types ---
-// By defining the API, we can remove all "any" types.
+import {
+  type GlobalWriterOpts,
+  type CreateParams,
+  type WriterSession,
+  type WriterCreateOptions,
+  type WriterDownloadProgressEvent,
+  type WriterAvailability,
+  SUPPORTED_LANGUAGES, // Import constants/types as needed
+  type SupportedLanguage,
+} from '@/types/writerTypes';
 
-type WriterAvailability = "available" | "unavailable" | "unknown";
 
-// The event for download progress
-interface WriterDownloadProgressEvent extends Event {
-  loaded: number;
+// Language Checking
+function isSupportedLanguage(lang: string): lang is SupportedLanguage {
+  return (SUPPORTED_LANGUAGES as readonly string[]).includes(lang);
 }
 
-// Options for creating a session
-interface WriterCreateOptions {
-  tone?: WriterTone;
-  format?: WriterFormat;
-  length?: WriterLength;
-  sharedContext?: string;
-  monitor?: (monitor: EventTarget) => void;
-}
-
-// The session object itself
-interface WriterSession {
-  write(
-    text: string,
-    opts?: { signal?: AbortSignal; context?: string }
-  ): Promise<string>;
-  writeStreaming(
-    text: string,
-    opts?: { signal?: AbortSignal; context?: string }
-  ): AsyncIterable<string>;
-  destroy(): void;
-}
-
-// The static Writer API on the global scope
-interface WriterStatic {
-  availability?(): Promise<WriterAvailability>;
-  create(options: WriterCreateOptions): Promise<WriterSession>;
-}
-
-// Tell TypeScript that `self` (window) might have this `Writer` property
-declare global {
-  interface Window {
-    Writer?: WriterStatic;
-  }
-}
-
-// --- 2. Make Types DRY (Don't Repeat Yourself) ---
-
-export const SUPPORTED_LANGUAGES = ["en", "es", "ja"] as const;
-export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
-
-export type WriterTone = "formal" | "neutral" | "casual";
-export type WriterFormat = "markdown" | "plain-text";
-export type WriterLength = "short" | "medium" | "long";
-
-export type GlobalWriterOpts = {
-  tone: WriterTone;
-  format: WriterFormat;
-  length: WriterLength;
-  outputLanguage: SupportedLanguage; // Use the new type
-  sharedContext?: string;
-};
-
-// --- 3. Encapsulate Complex Logic ---
 function getDefaultLanguage(): SupportedLanguage {
-  const lang = navigator.language.slice(0, 2);
-  if (SUPPORTED_LANGUAGES.includes(lang as any)) {
-    return lang as SupportedLanguage;
+  const browserLang = (navigator.language || "en").slice(0, 2);
+  if (isSupportedLanguage(browserLang)) {
+    return browserLang;
   }
   return "en";
 }
@@ -77,9 +32,6 @@ export const defaultWriterOpts: GlobalWriterOpts = {
   outputLanguage: getDefaultLanguage(), 
 };
 
-type CreateParams = Partial<GlobalWriterOpts> & {
-  onDownloadProgress?: (p: number) => void;
-};
 
 class WriterClient {
   // --- 4. Use Specific Types instead of "any" ---
