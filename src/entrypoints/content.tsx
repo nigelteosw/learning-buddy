@@ -48,7 +48,7 @@ function showPanel(
       heading: finalContent,
       back: finalExplanation,
     });
-    handleClose();
+    // handleClose();
   };
 
   if (panelHost) panelHost.style.pointerEvents = "auto";
@@ -161,13 +161,6 @@ const setupButton = (isEnabled: boolean) => {
         };
 
         // --- Initialize Sequentially ---
-        writerClient.setOpts(defaultWriterOpts);
-        await writerClient.initFromUserGesture({
-          ...defaultWriterOpts,
-          onDownloadProgress: writerProgress,
-        });
-        console.log("[content] Writer client initialized.");
-
         summarizerClient.setOpts(defaultSummarizerOpts);
         await summarizerClient.initFromUserGesture({
           ...defaultSummarizerOpts,
@@ -175,6 +168,15 @@ const setupButton = (isEnabled: boolean) => {
         });
         console.log("[content] Summarizer client initialized.");
 
+
+        writerClient.setOpts(defaultWriterOpts);
+        await writerClient.initFromUserGesture({
+          ...defaultWriterOpts,
+          onDownloadProgress: writerProgress,
+        });
+        console.log("[content] Writer client initialized.");
+
+        
         // --- Get Streams and Pass Them Down ---
         showPanel(text, 'Please Wait', 'Generating...', rect); // Update status
 

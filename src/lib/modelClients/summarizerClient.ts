@@ -1,18 +1,12 @@
-// --- 1. Define Core Types First ---
-export type SummaryType = "key-points" | "tldr" | "teaser" | "headline";
-export type SummaryLength = "short" | "medium" | "long";
-export type SummaryFormat = "markdown" | "plain-text";
+import {
+  type GlobalSummarizerOpts,
+  type CreateParams,
+  type SummarizerSession,
+  type SummarizerCreateOptions,
+  type SummarizerDownloadProgressEvent,
+  type SummarizerAvailability, // Import the type alias
+} from "@/types/summarizerTypes";
 
-// --- 2. Define Global Options using Core Types ---
-export type GlobalSummarizerOpts = {
-  type: SummaryType;
-  length: SummaryLength;
-  format: SummaryFormat;
-  outputLanguage: "en" | "es" | "ja";
-  sharedContext?: string;
-};
-
-// --- 3. Define Default Options ---
 export const defaultSummarizerOpts: GlobalSummarizerOpts = {
   sharedContext:
     "These are requests to summarize a concept. DO NOT use the name of the concepts in your summary.",
@@ -26,66 +20,6 @@ export const defaultSummarizerOpts: GlobalSummarizerOpts = {
     : "en",
 };
 
-// --- 4. Define API Interface Types ---
-type SummarizerAvailability =
-  | "available"
-  | "downloadable"
-  | "downloading"
-  | "unavailable"
-  | "unknown";
-
-interface SummarizerDownloadProgressEvent extends Event {
-  loaded: number;
-}
-
-interface SummarizerCreateOptions {
-  type?: SummaryType;
-  length?: SummaryLength;
-  format?: SummaryFormat;
-  sharedContext?: string;
-  outputLanguage?: "en" | "es" | "ja";
-  monitor?: (monitor: EventTarget) => void;
-}
-
-interface SummarizerSession {
-  summarize(
-    text: string,
-    opts?: {
-      outputLanguage?: "en" | "es" | "ja";
-      signal?: AbortSignal;
-      context?: string;
-    }
-  ): Promise<string>;
-  summarizeStreaming(
-    text: string,
-    opts?: {
-      outputLanguage?: "en" | "es" | "ja";
-      signal?: AbortSignal;
-      context?: string;
-    }
-  ): AsyncIterable<string>;
-  destroy(): void;
-}
-
-interface SummarizerStatic {
-  availability?(): Promise<SummarizerAvailability>;
-  create(options: SummarizerCreateOptions): Promise<SummarizerSession>;
-}
-
-// --- 5. Extend Global Window Interface ---
-declare global {
-  interface Window {
-    Summarizer?: SummarizerStatic;
-  }
-}
-
-// --- 6. Define Parameter Type for Initialization ---
-// (Use Partial<> to make base options optional when creating)
-export type CreateParams = Partial<GlobalSummarizerOpts> & {
-  onDownloadProgress?: (p: number) => void;
-};
-
-// --- (The rest of your SummarizerClient class goes here) ---
 
 class SummarizerClient {
   private session: SummarizerSession | null = null;
@@ -96,48 +30,25 @@ class SummarizerClient {
     this.opts = { ...this.opts, ...next };
   }
 
-  async availability(): Promise<
-    | "available"
-    | "downloadable"
-    | "downloading"
-    | "unavailable"
-    | "unknown"
-    | "no-api"
-  > {
-    // 1. Check if the main Summarizer API exists
+  async availability(): Promise<SummarizerAvailability | 'no-api' | 'unknown'> {
     if (!self.Summarizer) {
       console.warn("Summarizer API not found on self.");
       return "no-api";
     }
-    // 2. Check if the availability method exists
     if (!self.Summarizer.availability) {
       console.warn("Summarizer.availability() method not found.");
       return "unknown";
     }
-
-    // 3. Call the browser's availability function
     try {
       const state = await self.Summarizer.availability();
-      if (
-        [
-          "available",
-          "downloadable",
-          "downloading",
-          "unavailable",
-          "unknown",
-        ].includes(state)
-      ) {
-        return state as
-          | "available"
-          | "downloadable"
-          | "downloading"
-          | "unavailable"
-          | "unknown";
+      // Define known states based on the imported type
+      const knownStates: SummarizerAvailability[] = [
+          'available', 'downloadable', 'downloading', 'unavailable', 'unknown'
+      ];
+      if ((knownStates as string[]).includes(state)) {
+         return state as SummarizerAvailability; // Cast to imported type
       }
-      console.warn(
-        "Summarizer.availability() returned unexpected state:",
-        state
-      );
+      console.warn("Summarizer.availability() returned unexpected state:", state);
       return "unknown";
     } catch (e) {
       console.error("Error calling Summarizer.availability():", e);

@@ -1,4 +1,4 @@
-// --- 1. Define the (hypothetical) Writer API Types ---
+// src/lib/writerClient.ts
 import {
   type GlobalWriterOpts,
   type CreateParams,
@@ -8,8 +8,7 @@ import {
   type WriterAvailability,
   SUPPORTED_LANGUAGES, // Import constants/types as needed
   type SupportedLanguage,
-} from '@/types/writerTypes';
-
+} from "@/types/writerTypes";
 
 // Language Checking
 function isSupportedLanguage(lang: string): lang is SupportedLanguage {
@@ -29,9 +28,8 @@ export const defaultWriterOpts: GlobalWriterOpts = {
   tone: "casual",
   format: "plain-text",
   length: "medium",
-  outputLanguage: getDefaultLanguage(), 
+  outputLanguage: getDefaultLanguage(),
 };
-
 
 class WriterClient {
   // --- 4. Use Specific Types instead of "any" ---
@@ -75,7 +73,7 @@ class WriterClient {
     };
 
     this.creating = self
-      .Writer!.create(createOpts) 
+      .Writer!.create(createOpts)
       .then((s: WriterSession) => {
         this.session = s;
         return s;
@@ -114,7 +112,8 @@ class WriterClient {
   async writeStreaming(
     text: string,
     { signal, context }: { signal?: AbortSignal; context?: string } = {}
-  ): Promise<AsyncIterable<string>> { // Return type matches interface
+  ): Promise<AsyncIterable<string>> {
+    // Return type matches interface
     if (!this.session) {
       throw new Error(
         "Writer not initialized. Call initFromUserGesture() on a user click first."
@@ -127,45 +126,48 @@ class WriterClient {
       return emptyGenerator();
     }
 
-    // Call the session's streaming method and return the stream directly
-    // Note: This method itself might not need to be async if it just returns the iterable
-    // but keeping it async allows for potential future checks.
     return this.session.writeStreaming(input, {
       signal,
       context,
     });
   }
 
-  async availability(): Promise<
-    'available' | 'downloadable' | 'downloading' | 'unavailable' | 'unknown' | 'no-api'
-  > {
-    // 1. Check if the main Writer API exists
+  /**
+   * Checks availability of the writer.
+   */
+  async availability(): Promise<WriterAvailability | "no-api" | "unknown"> {
     if (!self.Writer) {
       console.warn("Writer API not found on self.");
-      return 'no-api';
+      return "no-api"; // Return the specific 'no-api' string
     }
-    // 2. Check if the specific availability method exists
     if (!self.Writer.availability) {
-       console.warn("Writer.availability() method not found.");
-       // If the main API exists but availability doesn't, assume it might be available
-       // but we can't be sure about downloading state.
-       return 'unknown';
+      console.warn("Writer.availability() method not found.");
+      return "unknown"; // Return the specific 'unknown' string
     }
 
-    // 3. Call the browser's availability function
     try {
       const state = await self.Writer.availability();
-      // The official docs mention 'available', 'downloadable', 'downloading'.
-      // Add 'unavailable' and 'unknown' as likely possibilities.
-      // Explicitly check for expected values.
-      if (['available', 'downloadable', 'downloading', 'unavailable', 'unknown'].includes(state)) {
-         return state as 'available' | 'downloadable' | 'downloading' | 'unavailable' | 'unknown';
+
+      // Define the known states from your type
+      const knownStates: WriterAvailability[] = [
+        "available",
+        "downloadable",
+        "downloading",
+        "unavailable",
+        "unknown",
+      ];
+
+      // 3. Check if the returned state is one of the known ones
+      if ((knownStates as string[]).includes(state)) {
+        // 4. Cast to your type alias
+        return state as WriterAvailability;
       }
+
       console.warn("Writer.availability() returned unexpected state:", state);
-      return 'unknown';
+      return "unknown"; // Fallback to 'unknown' for unexpected states
     } catch (e) {
       console.error("Error calling Writer.availability():", e);
-      return 'unavailable'; // Treat errors as unavailable
+      return "unavailable"; // Treat errors as 'unavailable'
     }
   }
 
