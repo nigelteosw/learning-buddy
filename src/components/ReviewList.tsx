@@ -89,7 +89,7 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
           </summary>
           <div className="mt-2 space-y-2 border-t border-zinc-700 pt-2">
             <div>
-              <h4 className="font-medium text-zinc-400">Original Text</h4>
+              <h4 className="font-medium text-zinc-400">Summary</h4>
               <p className="mt-1 text-zinc-100">{card.front}</p>
             </div>
             <div>

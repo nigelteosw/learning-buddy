@@ -100,7 +100,7 @@ export function AddCardForm({
             htmlFor="heading"
             className="mb-1 block text-sm font-medium text-zinc-400"
           >
-            Heading
+            Concept
           </label>
           <input
             id="heading"
@@ -119,7 +119,7 @@ export function AddCardForm({
             htmlFor="frontText"
             className="mb-1 block text-sm font-medium text-zinc-400"
           >
-            Original Text (Front)
+            Short Summary (Front)
           </label>
           {!cardToEdit && (initialHighlight || initialPrefillData) && (
              <p className="mb-2 text-xs text-zinc-500">
