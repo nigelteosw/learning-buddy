@@ -1,88 +1,264 @@
 /* src/components/Panel.css */
-/* Base styles for the panel */
+
+/* =========================
+   PANEL CONTAINER (Resizable)
+   ========================= */
 #lb-panel {
-  position: absolute; /* Changed from fixed, parent is fixed */
+  position: absolute;
   z-index: 2147483647;
-  width: 380px;
-  max-height: 60vh;
-  background-color: #18181b; /* zinc-900 */
+
+  /* 🆕 Make panel larger by default */
+  width: 400px;          /* previously 380px */
+  max-width: 90vw;       /* don't overflow viewport */
+  max-height: 80vh;      /* slightly taller */
+  min-width: 400px;      /* smallest allowed size */
+  min-height: 200px;
+
+  background-color: #18181b;
   color: white;
-  border-radius: 0.75rem; /* rounded-xl */
-  border: 1px solid #3f3f46; /* border-zinc-700 */
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); /* shadow-2xl */
+  border-radius: 0.75rem;
+  border: 1px solid #3f3f46;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
+
   overflow: hidden;
-  font-family: sans-serif; /* font-sans */
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   font-size: 13px;
   line-height: 1.5;
-  user-select: none; /* select-none */
+  user-select: none;
+
+  /* 🆕 Enable manual resizing */
+  resize: both;
+  overflow: auto; /* needed for resize handle to show */
+
+  /* 🆕 Add subtle resize handle hint */
+  cursor: default;
 }
 
-/* Header styles */
+#lb-panel::after {
+  content: "";
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 10px;
+  height: 10px;
+  background: linear-gradient(135deg, #52525b 25%, transparent 25%, transparent 50%, #52525b 50%, #52525b 75%, transparent 75%, transparent);
+  background-size: 6px 6px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+#lb-panel:hover::after {
+  opacity: 0.5;
+}
+
+/* =========================
+   HEADER
+   ========================= */
 #lb-panel-header {
   background-color: #27272a; /* zinc-800 */
-  border-bottom: 1px solid #3f3f46; /* border-zinc-700 */
+  border-bottom: 1px solid #3f3f46;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0.75rem; /* px-3 py-3 */
+  padding: 0.75rem;
+  cursor: grab;
 }
 
-/* Header title */
+#lb-panel-header:active {
+  cursor: grabbing;
+}
+
 #lb-panel-header-title {
   display: flex;
   flex-direction: column;
-  line-height: 1.25; /* leading-tight */
-}
-#lb-panel-header-title-main {
-  font-size: 13px;
-  font-weight: 600; /* font-semibold */
-  color: white;
-}
-#lb-panel-header-title-sub {
-  font-size: 11px;
-  color: #a1a1aa; /* text-zinc-400 */
+  line-height: 1.25;
 }
 
-/* Header actions */
+#lb-panel-header-title-main {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+#lb-panel-header-title-sub {
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
 #lb-panel-header-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* gap-2 */
+  gap: 0.5rem;
 }
 
-/* General button style for header */
+/* header buttons */
 #lb-panel-header-actions button {
-  padding: 0.25rem 0.625rem; /* px-2.5 py-1 */
+  padding: 0.25rem 0.625rem;
   font-size: 12px;
-  font-weight: 500; /* font-medium */
-  border-radius: 0.375rem; /* rounded-md */
-  background-color: #3f3f46; /* bg-zinc-700 */
-  border: 1px solid #52525b; /* border-zinc-600 */
+  font-weight: 500;
+  border-radius: 0.375rem;
+  background-color: #3f3f46;
+  border: 1px solid #52525b;
   color: white;
-  transition: background-color 0.15s ease-in-out; /* transition-colors */
+  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
   cursor: pointer;
 }
+
 #lb-panel-header-actions button:hover {
-  background-color: #52525b; /* hover:bg-zinc-600 */
+  background-color: #52525b;
+  border-color: #71717a;
 }
 
-/* Content section */
+/* =========================
+   TAB BAR
+   ========================= */
+#lb-panel-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #1f1f23;
+  border-bottom: 1px solid #3f3f46;
+  padding: 0.4rem 0.5rem;
+  gap: 0.4rem;
+  overflow: hidden; /* ✅ hide any overflow */
+  flex-wrap: nowrap; /* ✅ force single row */
+}
+
+/* Tab buttons */
+.lb-tab-btn {
+  flex: 1 1 0; /* ✅ evenly distribute width, shrink if needed */
+  text-align: center;
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 12px;
+  font-weight: 500;
+  color: #d4d4d8;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  white-space: nowrap;
+  min-width: 0; /* ✅ prevent overflow on small screens */
+}
+
+/* Hover and active */
+.lb-tab-btn:hover {
+  background-color: #323236;
+  border-color: #52525b;
+  color: #ffffff;
+}
+
+.lb-tab-active {
+  background-color: #3f3f46;
+  border-color: #63636b;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.08);
+}
+
+/* Make sure buttons stay readable when content overflows horizontally */
+#lb-panel-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+#lb-panel-tabs::-webkit-scrollbar-thumb {
+  background-color: #3f3f46;
+  border-radius: 3px;
+}
+#lb-panel-tabs::-webkit-scrollbar-thumb:hover {
+  background-color: #52525b;
+}
+
+/* =========================
+   BODY / TAB CONTENT
+   ========================= */
+#lb-panel-tab-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  font-size: 13px;
+  color: #e4e4e7;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Heading (short summary) */
 #lb-panel-content-heading {
-  padding: 0.75rem 0.75rem 0.25rem; /* px-3 pt-3 pb-1 */
-  font-size: 13px;
-  font-weight: 600; /* font-semibold */
-  color: white;
-  line-height: 1.375; /* leading-snug */
+  padding: 0.9rem 0.9rem 0.5rem; /* a bit more vertical space */
+  font-size: 15px;               /* was 13px */
+  font-weight: 600;
+  color: #fafafa;
+  line-height: 1.5;              /* slightly taller lines */
+  letter-spacing: 0.1px;         /* subtle spacing for clarity */
 }
 
-/* Body (explanation) section */
+/* Body (explanation) */
 #lb-panel-body {
-  padding: 0 0.75rem 0.75rem; /* px-3 pb-3 */
+  padding: 0.25rem 0.9rem 0.9rem; /* more gap from heading, even spacing all around */
   font-size: 13px;
-  color: #e4e4e7; /* text-zinc-200 */
+  color: #e4e4e7;
   white-space: pre-wrap;
   overflow-y: auto;
   flex: 1;
+}
+
+/* =========================
+   FOOTER / SOURCE
+   ========================= */
+#lb-panel-footer {
+  border-top: 1px solid #3f3f46;
+  background-color: #18181b;
+  padding: 0.5rem 0.75rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#lb-panel-source {
+  font-size: 11px;
+  color: #a1a1aa;
+  line-height: 1.4;
+}
+
+.lb-source-frag {
+  color: #d4d4d8;
+  font-style: italic;
+}
+
+/* Footer button */
+#lb-panel-footer button {
+  align-self: flex-start;
+  padding: 0.25rem 0.625rem;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  background-color: #2563eb; /* blue-600 */
+  border: 1px solid #2563eb;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out, filter 0.15s ease-in-out;
+}
+
+#lb-panel-footer button:hover {
+  background-color: #1d4ed8; /* blue-700 */
+  filter: brightness(1.05);
+}
+
+/* =========================
+   SCROLLBAR
+   ========================= */
+#lb-panel-body::-webkit-scrollbar,
+#lb-panel-tab-body::-webkit-scrollbar {
+  width: 8px;
+}
+#lb-panel-body::-webkit-scrollbar-thumb,
+#lb-panel-tab-body::-webkit-scrollbar-thumb {
+  background-color: #3f3f46;
+  border-radius: 4px;
+}
+#lb-panel-body::-webkit-scrollbar-thumb:hover,
+#lb-panel-tab-body::-webkit-scrollbar-thumb:hover {
+  background-color: #52525b;
 }

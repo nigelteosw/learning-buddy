@@ -31,40 +31,233 @@ function ensureReactRoot(): Root {
   return reactRoot;
 }
 
-function showPanel(
-  originalText: string,
-  initialContent: string,
-  initialExplanation: string,
-  nearRect: DOMRect | null,
-  // Add optional stream props
-  contentStream?: AsyncIterable<string>,
-  explanationStream?: AsyncIterable<string>
-) {
-  const root = ensureReactRoot();
-  const handleClose = () => { root.render(null); };
-  const handleAdd = (finalContent: string, finalExplanation: string) => {
-    browser.runtime.sendMessage({
-      type: 'prefill-and-open-sidepanel',
-      front: originalText,
-      heading: finalContent,
-      back: finalExplanation,
-    });
-    // handleClose();
-  };
+type PanelData = {
+  sourceText: string;
+  nearRect: DOMRect | null;
 
+  summaryText: string;
+  explainText: string;
+  keyIdeasText: string;
+  analogyText: string;
+  quizText: string;
+
+  summaryLoading: boolean;
+  explainLoading: boolean;
+  keyIdeasLoading: boolean;
+  analogyLoading: boolean;
+  quizLoading: boolean;
+
+  summaryError: string | null;
+  explainError: string | null;
+  keyIdeasError: string | null;
+  analogyError: string | null;
+  quizError: string | null;
+};
+
+let panelData: PanelData | null = null;
+let panelActiveTab: "explain" | "key" | "analogy" | "quiz" = "explain";
+
+function renderPanel() {
+  if (!panelData) return;
+
+  // snapshot so TS treats it as non-null and stable
+  const data = panelData;
+
+  const root = ensureReactRoot();
   if (panelHost) panelHost.style.pointerEvents = "auto";
 
-  // Pass streams down to the Panel component
+  const handleClose = () => {
+    root.render(null);
+  };
+
+  const handleAdd = (front: string, back: string) => {
+    browser.runtime.sendMessage({
+      type: "prefill-and-open-sidepanel",
+      front: data.sourceText,
+      heading: front,
+      back: back,
+    });
+  };
+
   root.render(
     <Panel
-      initialContent={initialContent}
-      initialExplanation={initialExplanation}
-      contentStream={contentStream}           // Pass stream
-      explanationStream={explanationStream}   // Pass stream
-      nearRect={nearRect}
+      nearRect={data.nearRect}
+      sourceText={data.sourceText}
+
+      summaryText={data.summaryText}
+      explainText={data.explainText}
+      keyIdeasText={data.keyIdeasText}
+      analogyText={data.analogyText}
+      quizText={data.quizText}
+
+      summaryLoading={data.summaryLoading}
+      explainLoading={data.explainLoading}
+      keyIdeasLoading={data.keyIdeasLoading}
+      analogyLoading={data.analogyLoading}
+      quizLoading={data.quizLoading}
+
+      summaryError={data.summaryError}
+      explainError={data.explainError}
+      keyIdeasError={data.keyIdeasError}
+      analogyError={data.analogyError}
+      quizError={data.quizError}
+
       onClose={handleClose}
       onAdd={handleAdd}
+      onTabChange={async (tab) => {
+        // we still have access to `data` from this closure
+        panelActiveTab = tab;
+
+        // Key Ideas tab
+        if (
+          tab === "key" &&
+          !data.keyIdeasText &&
+          !data.keyIdeasLoading
+        ) {
+          streamPromptIntoField(
+            () => promptClient.generateTakeawaysStream(data.sourceText),
+            "keyIdeasText",
+            "keyIdeasLoading",
+            "keyIdeasError"
+          );
+          return;
+        }
+
+        // Analogy tab
+        if (
+          tab === "analogy" &&
+          !data.analogyText &&
+          !data.analogyLoading
+        ) {
+          streamPromptIntoField(
+            () => promptClient.generateAnalogyStream(data.sourceText),
+            "analogyText",
+            "analogyLoading",
+            "analogyError"
+          );
+          return;
+        }
+
+        // Quiz tab
+        if (
+          tab === "quiz" &&
+          !data.quizText &&
+          !data.quizLoading
+        ) {
+          streamPromptIntoField(
+            () => promptClient.generateQuizStream(data.sourceText),
+            "quizText",
+            "quizLoading",
+            "quizError"
+          );
+          return;
+        }
+
+        // just switching tabs when we already have that tab's data
+        renderPanel();
+      }}
     />
+  );
+}
+
+async function streamPromptIntoField(
+  getStream: () => Promise<AsyncIterable<string>>,
+  textField: keyof Pick<
+    PanelData,
+    "summaryText" | "explainText" | "keyIdeasText" | "analogyText" | "quizText"
+  >,
+  loadingField: keyof Pick<
+    PanelData,
+    | "summaryLoading"
+    | "explainLoading"
+    | "keyIdeasLoading"
+    | "analogyLoading"
+    | "quizLoading"
+  >,
+  errorField: keyof Pick<
+    PanelData,
+    | "summaryError"
+    | "explainError"
+    | "keyIdeasError"
+    | "analogyError"
+    | "quizError"
+  >
+) {
+  if (!panelData) return;
+
+  // mark loading
+  panelData[loadingField] = true;
+  panelData[errorField] = null;
+  panelData[textField] = "";
+  renderPanel();
+
+  try {
+    const stream = await getStream();
+    for await (const chunk of stream) {
+      if (!panelData) break;
+      panelData[textField] = (panelData[textField] as string) + chunk;
+      renderPanel();
+    }
+
+    if (!panelData) return;
+    panelData[loadingField] = false;
+    if ((panelData[textField] as string).trim() === "") {
+      panelData[textField] = "No output.";
+    }
+    renderPanel();
+  } catch (err) {
+    console.error("streamPromptIntoField error:", err);
+    if (!panelData) return;
+    panelData[loadingField] = false;
+    panelData[errorField] = "Error generating content.";
+    renderPanel();
+  }
+}
+
+async function initPanelForText(text: string, rect: DOMRect | null) {
+  // create initial state
+  panelData = {
+    sourceText: text,
+    nearRect: rect,
+
+    summaryText: "Please Wait",
+    explainText: "Initializing AI...",
+    keyIdeasText: "",
+    analogyText: "",
+    quizText: "",
+
+    summaryLoading: true,
+    explainLoading: true,
+    keyIdeasLoading: false,
+    analogyLoading: false,
+    quizLoading: false,
+
+    summaryError: null,
+    explainError: null,
+    keyIdeasError: null,
+    analogyError: null,
+    quizError: null,
+  };
+
+  panelActiveTab = "explain";
+  renderPanel();
+
+  // at this point you will already have initialized your clients (availability + initFromUserGesture)
+
+  // start streaming summary (summarizerClient) into summaryText
+  streamPromptIntoField(
+    () => summarizerClient.summarizeStreaming(text, {}),
+    "summaryText",
+    "summaryLoading",
+    "summaryError"
+  );
+
+  // start streaming explanation (writerClient) into explainText
+  streamPromptIntoField(
+    () => writerClient.writeStreaming(text, {}),
+    "explainText",
+    "explainLoading",
+    "explainError"
   );
 }
 
@@ -75,141 +268,127 @@ const setupButton = (isEnabled: boolean) => {
     currentButton = new SelectionButton();
 
     currentButton.setOnLearnClick(async (text, rect) => {
-      // Show initial loading panel (no streams yet)
-      let downloadProgress = { writer: -1, summarizer: -1 };
-      let writerAvailable = "unknown",
-        summarizerAvailable = "unknown";
+  let downloadProgress = { writer: -1, summarizer: -1 };
+  let writerAvailable = "unknown",
+    summarizerAvailable = "unknown",
+    promptAvailable = "unknown";
 
-      showPanel(text, "Please Wait", "Checking AI...", rect);
+  // Step 0: temporary panel while we check
+  panelData = {
+    sourceText: text,
+    nearRect: rect,
 
-      try {
-        // --- Availability Check (Keep as is) ---
-        [writerAvailable, summarizerAvailable] = await Promise.all([
-          writerClient.availability(),
-          summarizerClient.availability(),
-        ]);
-        console.log("[content] AI Availability:", {
-          writer: writerAvailable,
-          summarizer: summarizerAvailable,
-        });
+    summaryText: "Please Wait",
+    explainText: "Checking AI...",
+    keyIdeasText: "",
+    analogyText: "",
+    quizText: "",
 
-        const needsDownload =
-          writerAvailable === "downloadable" ||
-          writerAvailable === "downloading" ||
-          summarizerAvailable === "downloadable" ||
-          summarizerAvailable === "downloading";
-        const isUnavailable =
-          writerAvailable === "unavailable" ||
-          writerAvailable === "no-api" ||
-          summarizerAvailable === "unavailable" ||
-          summarizerAvailable === "no-api";
+    summaryLoading: false,
+    explainLoading: false,
+    keyIdeasLoading: false,
+    analogyLoading: false,
+    quizLoading: false,
 
-        if (isUnavailable) {
-          throw new Error(
-            "AI features are unavailable. Please ensure they are enabled in Chrome and your device is supported."
-          );
-        }
+    summaryError: null,
+    explainError: null,
+    keyIdeasError: null,
+    analogyError: null,
+    quizError: null,
+  };
+  renderPanel();
 
-        // --- DEFINE updateProgress HERE ---
-        let updateProgress = () => {}; // Default empty function
-        if (needsDownload) {
-          showPanel(
-            text,
-            "Please Wait",
-            "Gemini Nano might take some time to download.",
-            rect
-          );
+  try {
+    // Availability
+    [writerAvailable, summarizerAvailable, promptAvailable] = await Promise.all([
+      writerClient.availability(),
+      summarizerClient.availability(),
+      promptClient.availability(),
+    ]);
 
-          // Define the actual function if needed
-          updateProgress = () => {
-            const wProg =
-              downloadProgress.writer >= 0
-                ? `Writer Download Progress: ${Math.round(
-                    downloadProgress.writer * 100
-                  )}%`
-                : "";
-            const sProg =
-              downloadProgress.summarizer >= 0
-                ? `Summarizer Download Progress: ${Math.round(
-                    downloadProgress.summarizer * 100
-                  )}%`
-                : "";
-            // Only update if download is still potentially ongoing
-            if (
-              downloadProgress.writer < 1 ||
-              downloadProgress.summarizer < 1
-            ) {
-              showPanel(
-                text,
-                "Please Wait",
-                `Downloading AI model... ${wProg} ${sProg}`,
-                rect
-              );
-            }
-          };
-        } else {
-          showPanel(text, "Please Wait", "Initializing AI...", rect);
-        }
-        // --- END DEFINITION ---
+    const needsDownload =
+      writerAvailable === "downloadable" ||
+      writerAvailable === "downloading" ||
+      summarizerAvailable === "downloadable" ||
+      summarizerAvailable === "downloading" ||
+      promptAvailable === "downloadable" ||
+      promptAvailable === "downloading";
 
-        const writerProgress = (p: number) => {
-          downloadProgress.writer = p;
-          if (needsDownload) updateProgress(); // Call the defined function
-        };
-        const summarizerProgress = (p: number) => {
-          downloadProgress.summarizer = p;
-          if (needsDownload) updateProgress(); // Call the defined function
-        };
+    const isUnavailable =
+      writerAvailable === "unavailable" ||
+      writerAvailable === "no-api" ||
+      summarizerAvailable === "unavailable" ||
+      summarizerAvailable === "no-api" ||
+      promptAvailable === "unavailable" ||
+      promptAvailable === "no-api";
 
-        // --- Initialize Sequentially ---
-        summarizerClient.setOpts(defaultSummarizerOpts);
-        await summarizerClient.initFromUserGesture({
-          ...defaultSummarizerOpts,
-          onDownloadProgress: summarizerProgress,
-        });
-        console.log("[content] Summarizer client initialized.");
+    if (isUnavailable) {
+      throw new Error(
+        "AI features are unavailable. Please ensure they are enabled in Chrome and your device is supported."
+      );
+    }
 
+    // Show download status if needed
+    function updateProgressUI() {
+      if (!panelData) return;
+      const wProg =
+        downloadProgress.writer >= 0
+          ? `Writer Download: ${Math.round(downloadProgress.writer * 100)}%`
+          : "";
+      const sProg =
+        downloadProgress.summarizer >= 0
+          ? `Summarizer Download: ${Math.round(downloadProgress.summarizer * 100)}%`
+          : "";
 
-        writerClient.setOpts(defaultWriterOpts);
-        await writerClient.initFromUserGesture({
-          ...defaultWriterOpts,
-          onDownloadProgress: writerProgress,
-        });
-        console.log("[content] Writer client initialized.");
+      panelData.summaryText = "Please Wait";
+      panelData.explainText = `Downloading AI model... ${wProg} ${sProg}`;
+      renderPanel();
+    }
 
-        promptClient.setOpts(defaultPromptOpts);
-        await promptClient.initFromUserGesture({
-          ...defaultPromptOpts,
-        });
-        console.log("[content] Prompt client initialized.");
-        
-        // --- Get Streams and Pass Them Down ---
-        showPanel(text, 'Please Wait', 'Generating...', rect); // Update status
+    if (needsDownload) {
+      // interim panel update
+      panelData.summaryText = "Please Wait";
+      panelData.explainText = "Gemini Nano might take some time to download.";
+      renderPanel();
+    }
 
-        // Get the streams WITHOUT consuming them here
-        const summarizerStream = await summarizerClient.summarizeStreaming(text, {});
-        const writerStream = await writerClient.writeStreaming(text, {});
-        
-        console.log("[content] Got AI streams.");
+    const writerProgress = (p: number) => {
+      downloadProgress.writer = p;
+      if (needsDownload) updateProgressUI();
+    };
+    const summarizerProgress = (p: number) => {
+      downloadProgress.summarizer = p;
+      if (needsDownload) updateProgressUI();
+    };
 
-        // Re-render the panel, passing the streams down
-        // The Panel component will handle consuming them via useEffect
-        showPanel(
-            text,
-            '',               // Start with empty summary
-            '',               // Start with empty explanation
-            rect,
-            summarizerStream, // Pass the summarizer stream
-            writerStream      // Pass the writer stream
-        );
-        // --- End Stream Passing ---
+    // Init
+    summarizerClient.setOpts(defaultSummarizerOpts);
+    await summarizerClient.initFromUserGesture({
+      ...defaultSummarizerOpts,
+      onDownloadProgress: summarizerProgress,
+    });
 
-      } catch (err: any) {
-        console.error('[content] AI error:', err);
-        // Render panel in error state (no streams)
-        showPanel(text, 'Error', `${err?.message ?? String(err)}`, rect);
-      }
-    }); // End setOnLearnClick
+    writerClient.setOpts(defaultWriterOpts);
+    await writerClient.initFromUserGesture({
+      ...defaultWriterOpts,
+      onDownloadProgress: writerProgress,
+    });
+
+    promptClient.setOpts(defaultPromptOpts);
+    await promptClient.initFromUserGesture({
+      ...defaultPromptOpts,
+    });
+
+    // Now actually populate the panel with streamed AI output
+    await initPanelForText(text, rect);
+  } catch (err: any) {
+    console.error("[content] AI error:", err);
+    if (!panelData) return;
+    panelData.summaryText = "Error";
+    panelData.explainText = err?.message ?? String(err);
+    renderPanel();
+  }
+}); // End setOnLearnClick
 
     currentButton.initializeListeners();
   } else if (!isEnabled && currentButton) {
@@ -233,46 +412,59 @@ export default defineContentScript({
     isExtensionEnabled.watch(setupButton);
 
     browser.runtime.onMessage.addListener(async (msg) => {
-      const isEnabled = await isExtensionEnabled.getValue();
-      // ... (Check message validity - unchanged) ...
-       if (!isEnabled || msg.type !== 'EXPLAIN_TEXT_FROM_CONTEXT_MENU' || typeof msg.text !== 'string') return;
-       const text = msg.text.trim();
-       if (!text) return;
+  const isEnabled = await isExtensionEnabled.getValue();
+  if (
+    !isEnabled ||
+    msg.type !== "EXPLAIN_TEXT_FROM_CONTEXT_MENU" ||
+    typeof msg.text !== "string"
+  )
+    return;
 
+  const text = msg.text.trim();
+  if (!text) return;
 
-      // Show initial loading panel (centered, no streams yet)
-      showPanel(text, 'Please Wait', 'Initializing AI...', null);
+  // boot panel in "initializing" mode in the center
+  panelData = {
+    sourceText: text,
+    nearRect: null,
 
-      try {
-        // --- Initialize (Keep sequential or concurrent as needed for context menu) ---
-        // Context menu click IS a user gesture, so init should work. Concurrent might be okay here.
-         await Promise.all([
-          writerClient.initFromUserGesture(defaultWriterOpts),
-          summarizerClient.initFromUserGesture(defaultSummarizerOpts),
-        ]);
+    summaryText: "Please Wait",
+    explainText: "Initializing AI...",
+    keyIdeasText: "",
+    analogyText: "",
+    quizText: "",
 
-        // --- Get Streams and Pass Them Down ---
-        showPanel(text, 'Please Wait', 'Generating...', null); // Update status
+    summaryLoading: false,
+    explainLoading: false,
+    keyIdeasLoading: false,
+    analogyLoading: false,
+    quizLoading: false,
 
-        const writerStream = await writerClient.writeStreaming(text, {});
-        const summarizerStream = await summarizerClient.summarizeStreaming(text, {});
-        console.log("[content] Got AI streams (from context menu).");
+    summaryError: null,
+    explainError: null,
+    keyIdeasError: null,
+    analogyError: null,
+    quizError: null,
+  };
+  renderPanel();
 
-        // Re-render panel with streams (centered)
-        showPanel(
-            text,
-            '', '', // Start empty
-            null, // Centered
-            summarizerStream,
-            writerStream
-        );
-        // --- End Stream Passing ---
+  try {
+    await Promise.all([
+      writerClient.initFromUserGesture(defaultWriterOpts),
+      summarizerClient.initFromUserGesture(defaultSummarizerOpts),
+      promptClient.initFromUserGesture(defaultPromptOpts),
+    ]);
 
-      } catch (err: any) {
-        console.error('[content] AI error (from context menu):', err);
-        showPanel(text, 'Error', `${err?.message ?? String(err)}`, null);
-      }
-    }); // End listener
+    // start streaming into panelData
+    await initPanelForText(text, null);
+  } catch (err: any) {
+    console.error("[content] AI error (from context menu):", err);
+    if (!panelData) return;
+    panelData.summaryText = "Error";
+    panelData.explainText = err?.message ?? String(err);
+    renderPanel();
+  }
+}); // End listener
   }, // End main
 }); // End defineContentScript
 

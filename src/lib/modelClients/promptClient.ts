@@ -287,12 +287,19 @@ class PromptClient {
   }
 
   async generateQuizStream(
-    text: string,
-    { signal }: { signal?: AbortSignal } = {}
-  ): Promise<AsyncIterable<string>> {
-    return this.runStreamingPrompt(
-      () =>
-        `Based on the text below, create a simple multiple-choice question with one correct answer (A, B, C, or D) to test understanding. Clearly label the question, the options, and indicate the correct answer.
+  text: string,
+  { signal }: { signal?: AbortSignal } = {}
+): Promise<AsyncIterable<string>> {
+  // pick a random target answer letter before passing to model
+  const correctLetter = ["A", "B", "C", "D"][Math.floor(Math.random() * 4)];
+
+  return this.runStreamingPrompt(
+    () => `
+You are a quiz generator. Based on the text below, create ONE simple multiple-choice question
+to test understanding. There must be exactly four options (A, B, C, D), and the correct answer
+should be placed under option **${correctLetter}**.
+
+Randomize which option is correct each time by following the letter above.
 
 Text:
 "${text}"
@@ -303,10 +310,11 @@ A) [Option A]
 B) [Option B]
 C) [Option C]
 D) [Option D]
-Correct Answer: [Letter only, e.g., B]`,
-      signal
-    );
-  }
+Correct Answer: ${correctLetter}
+`,
+    signal
+  );
+}
 
   /**
    * Append extra context to the active session without asking a direct question yet.

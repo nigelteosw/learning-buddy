@@ -9,6 +9,12 @@ export default defineConfig({
     plugins: [react(), tailwind()],
   }),
   manifest: {
+    name: 'Learning Buddy',
+    short_name: 'Learning Buddy',
+    description: 'Select text on any page to get AI-powered summaries, explanations, key ideas, analogies, and quizzes.',
+
+    // You can also set the version here
+    version: '0.1.0',
     // Add all the permissions you outlined
     permissions: [
       'sidePanel',

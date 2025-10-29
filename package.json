@@ -1,6 +1,6 @@
 {
-  "name": "wxt-react-starter",
-  "description": "manifest.json description",
+  "name": "learning-buddy",
+  "description": "Your Learning Buddy. Select text to get instant AI explanations, summaries, and quizzes right on the page.",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -24,6 +24,7 @@
     "@wxt-dev/storage": "^1.2.6",
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",
+    "marked": "^16.4.1",
     "mitt": "^3.0.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

@@ -1,27 +1,71 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./Panel.css";
+import { marked } from "marked";
+
+export type PanelTab = "explain" | "key" | "analogy" | "quiz";
 
 export type PanelProps = {
   onClose: () => void;
-  onAdd: (content: string, explanation: string) => void;
+  onAdd: (front: string, back: string) => void;
   nearRect?: DOMRect | null;
-  initialContent: string;
-  initialExplanation: string;
-  contentStream?: AsyncIterable<string>;
-  explanationStream?: AsyncIterable<string>;
+
+  sourceText?: string;
+
+  // data for tabs (these are just strings now, not "initial")
+  summaryText: string;
+  explainText: string;
+  keyIdeasText: string;
+  analogyText: string;
+  quizText: string;
+
+  // loading states
+  summaryLoading: boolean;
+  explainLoading: boolean;
+  keyIdeasLoading: boolean;
+  analogyLoading: boolean;
+  quizLoading: boolean;
+
+  // error states
+  summaryError: string | null;
+  explainError: string | null;
+  keyIdeasError: string | null;
+  analogyError: string | null;
+  quizError: string | null;
+
+  onTabChange?: (tab: PanelTab) => void;
 };
 
 export const Panel: React.FC<PanelProps> = ({
   onClose,
   onAdd,
   nearRect,
-  initialContent,
-  initialExplanation,
-  contentStream,
-  explanationStream,
+  sourceText,
+
+  summaryText,
+  explainText,
+  keyIdeasText,
+  analogyText,
+  quizText,
+
+  summaryLoading,
+  explainLoading,
+  keyIdeasLoading,
+  analogyLoading,
+  quizLoading,
+
+  summaryError,
+  explainError,
+  keyIdeasError,
+  analogyError,
+  quizError,
+
+  onTabChange,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
+  // -----------------------------
+  // positioning/drag (unchanged)
+  // -----------------------------
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [drag, setDrag] = useState<{
     startX: number;
@@ -30,10 +74,6 @@ export const Panel: React.FC<PanelProps> = ({
     origLeft: number;
   } | null>(null);
 
-  const [currentContent, setCurrentContent] = useState(initialContent);
-  const [currentExplanation, setCurrentExplanation] = useState(initialExplanation);
-
-  // --- Initial positioning in VIEWPORT space ---
   useEffect(() => {
     const panelW = 380;
     const panelH = Math.min(window.innerHeight * 0.6, 400);
@@ -43,18 +83,15 @@ export const Panel: React.FC<PanelProps> = ({
       let top = nearRect.bottom + 10;
       let left = nearRect.left;
 
-      // try above if bottom would overflow
       if (top + panelH + pad > window.innerHeight) {
         top = nearRect.top - panelH - 10;
       }
 
-      // clamp vertical
       if (top < pad) top = pad;
       if (top + panelH + pad > window.innerHeight) {
         top = window.innerHeight - panelH - pad;
       }
 
-      // clamp horizontal
       if (left + panelW + pad > window.innerWidth) {
         left = window.innerWidth - panelW - pad;
       }
@@ -71,27 +108,20 @@ export const Panel: React.FC<PanelProps> = ({
     }
   }, [nearRect]);
 
-  // --- Dragging logic in VIEWPORT space, with CLAMP ---
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
-      if (!drag) return;
-      if (!ref.current) return;
+      if (!drag || !ref.current) return;
 
       const pad = 8;
-
-      // panel size right now (in case it responsive-changes)
       const { offsetWidth: panelW, offsetHeight: panelH } = ref.current;
 
-      // raw new pos
       let newTop = drag.origTop + (e.clientY - drag.startY);
       let newLeft = drag.origLeft + (e.clientX - drag.startX);
 
-      // clamp vertically
       const maxTop = window.innerHeight - panelH - pad;
       if (newTop < pad) newTop = pad;
-      if (newTop > maxTop) newTop = Math.max(pad, maxTop); // maxTop can go negative if panel > viewport
+      if (newTop > maxTop) newTop = Math.max(pad, maxTop);
 
-      // clamp horizontally
       const maxLeft = window.innerWidth - panelW - pad;
       if (newLeft < pad) newLeft = pad;
       if (newLeft > maxLeft) newLeft = Math.max(pad, maxLeft);
@@ -126,6 +156,32 @@ export const Panel: React.FC<PanelProps> = ({
     });
   };
 
+  useEffect(() => {
+    function onResize() {
+      if (!ref.current || !pos) return;
+      const pad = 8;
+      const panelW = ref.current.offsetWidth;
+      const panelH = ref.current.offsetHeight;
+
+      let newTop = pos.top;
+      let newLeft = pos.left;
+
+      const maxTop = window.innerHeight - panelH - pad;
+      const maxLeft = window.innerWidth - panelW - pad;
+
+      if (newTop > maxTop) newTop = Math.max(pad, maxTop);
+      if (newLeft > maxLeft) newLeft = Math.max(pad, maxLeft);
+
+      if (newTop < pad) newTop = pad;
+      if (newLeft < pad) newLeft = pad;
+
+      setPos({ top: newTop, left: newLeft });
+    }
+
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [pos]);
+
   const dynamicStyle = pos
     ? {
         top: `${pos.top}px`,
@@ -138,90 +194,123 @@ export const Panel: React.FC<PanelProps> = ({
         transform: "translate(-50%, -50%)",
       };
 
-  // --- contentStream handling ---
-  useEffect(() => {
-    if (!contentStream) {
-      setCurrentContent(initialContent);
-      return;
+  // -----------------------------
+  // TAB STATE (local UI only)
+  // -----------------------------
+  const [activeTab, setActiveTab] = useState<PanelTab>("explain");
+
+  // -----------------------------
+  // what to show in the body
+  // -----------------------------
+  function renderActiveTabBody() {
+  switch (activeTab) {
+    case "explain": {
+      // Handle errors first
+      if (explainError) return explainError;
+      if (summaryError) return summaryError;
+
+      // We only show the loading placeholders if we are loading
+      // AND we haven't received any streamed text yet.
+      const showSummaryLoading = summaryLoading && !summaryText;
+      const showExplainLoading = explainLoading && !explainText;
+
+      return (
+        <>
+          <div id="lb-panel-content-heading">
+            {showSummaryLoading ? "…summarizing" : summaryText}
+          </div>
+          <div id="lb-panel-body">
+            {showExplainLoading ? "…thinking" : explainText}
+          </div>
+        </>
+      );
     }
-    let isActive = true;
-    setCurrentContent("");
 
-    const processStream = async () => {
-      try {
-        for await (const chunk of contentStream) {
-          if (!isActive) break;
-          setCurrentContent((prev) => prev + chunk);
-        }
-        if (isActive) {
-          setCurrentContent((prev) => prev || "Summary");
-        }
-      } catch (error) {
-        if (isActive) setCurrentContent("Error summarizing.");
-        console.error("Error processing content stream:", error);
+    case "key": {
+      if (keyIdeasError) return keyIdeasError;
+
+      // Only block-render the placeholder if nothing has streamed in yet.
+      if (keyIdeasLoading && !keyIdeasText) {
+        return "…finding key ideas";
       }
-    };
-    processStream();
-    return () => {
-      isActive = false;
-    };
-  }, [contentStream, initialContent]);
 
-  useEffect(() => {
-  function onResize() {
-    if (!ref.current || !pos) return;
-    const pad = 8;
-    const panelW = ref.current.offsetWidth;
-    const panelH = ref.current.offsetHeight;
+      return (
+        <div
+          id="lb-panel-body"
+          dangerouslySetInnerHTML={{
+            __html: marked.parse(keyIdeasText || ""),
+          }}
+        />
+      );
+    }
 
-    let newTop = pos.top;
-    let newLeft = pos.left;
+    case "analogy": {
+      if (analogyError) return analogyError;
 
-    const maxTop = window.innerHeight - panelH - pad;
-    const maxLeft = window.innerWidth - panelW - pad;
+      if (analogyLoading && !analogyText) {
+        return "…coming up with an analogy";
+      }
 
-    if (newTop > maxTop) newTop = Math.max(pad, maxTop);
-    if (newLeft > maxLeft) newLeft = Math.max(pad, maxLeft);
+      return (
+        <div
+          id="lb-panel-body"
+          dangerouslySetInnerHTML={{
+            __html: marked.parse(analogyText || ""),
+          }}
+        />
+      );
+    }
 
-    if (newTop < pad) newTop = pad;
-    if (newLeft < pad) newLeft = pad;
+    case "quiz": {
+      if (quizError) return quizError;
 
-    setPos({ top: newTop, left: newLeft });
+      if (quizLoading && !quizText) {
+        return "…writing a quiz question";
+      }
+
+      return (
+        <div
+          id="lb-panel-body"
+          dangerouslySetInnerHTML={{
+            __html: marked.parse(quizText || ""),
+          }}
+        />
+      );
+    }
+
+    default:
+      return null;
+  }
+}
+
+  // -----------------------------
+  // Add Card (uses props now)
+  // -----------------------------
+  function handleAddClick() {
+    // Always use summaryText as "front"
+    const front = summaryText?.trim()
+      ? summaryText
+      : `Summary of "${sourceText ?? "this topic"}"`;
+
+    let back = "";
+
+    if (activeTab === "key") {
+      back = keyIdeasText;
+    } else if (activeTab === "quiz") {
+      back = quizText;
+    } else if (activeTab === "analogy") {
+      back = analogyText;
+    } else {
+      // default explain
+      back = explainText;
+    }
+
+    onAdd(front, back);
   }
 
-  window.addEventListener("resize", onResize);
-  return () => window.removeEventListener("resize", onResize);
-}, [pos]);
-
-  // --- explanationStream handling ---
-  useEffect(() => {
-    if (!explanationStream) {
-      setCurrentExplanation(initialExplanation);
-      return;
-    }
-    let isActive = true;
-    setCurrentExplanation("");
-
-    const processStream = async () => {
-      try {
-        for await (const chunk of explanationStream) {
-          if (!isActive) break;
-          setCurrentExplanation((prev) => prev + chunk);
-        }
-        if (isActive) {
-          setCurrentExplanation((prev) => prev || "No output.");
-        }
-      } catch (error) {
-        if (isActive) setCurrentExplanation("Error generating explanation.");
-        console.error("Error processing explanation stream:", error);
-      }
-    };
-    processStream();
-    return () => {
-      isActive = false;
-    };
-  }, [explanationStream, initialExplanation]);
-
+  // -----------------------------
+  // JSX
+  // -----------------------------
   return (
     <div
       ref={ref}
@@ -239,26 +328,82 @@ export const Panel: React.FC<PanelProps> = ({
           cursor: drag ? "grabbing" : "grab",
         }}
       >
-        {/* Title */}
         <div id="lb-panel-header-title">
           <div id="lb-panel-header-title-main">Learning Buddy</div>
           <div id="lb-panel-header-title-sub">AI explanation panel</div>
         </div>
 
-        {/* Actions */}
         <div id="lb-panel-header-actions">
-          <button onClick={() => onAdd(currentContent, currentExplanation)}>
-            Add
-          </button>
+          {/* <button onClick={handleAddClick}>Make Card</button> */}
           <button onClick={onClose}>Close</button>
         </div>
       </div>
 
-      {/* Summary */}
-      <div id="lb-panel-content-heading">{currentContent}</div>
+      {/* TAB BAR */}
+      <div id="lb-panel-tabs">
+        <button
+          className={
+            "lb-tab-btn" + (activeTab === "explain" ? " lb-tab-active" : "")
+          }
+          onClick={() => {
+            setActiveTab("explain");
+            onTabChange?.("explain");
+          }}
+        >
+          Explanation
+        </button>
 
-      {/* Body */}
-      <div id="lb-panel-body">{currentExplanation}</div>
+        <button
+          className={
+            "lb-tab-btn" + (activeTab === "key" ? " lb-tab-active" : "")
+          }
+          onClick={() => {
+            setActiveTab("key");
+            onTabChange?.("key");
+          }}
+        >
+          Key Ideas
+        </button>
+
+        <button
+          className={
+            "lb-tab-btn" + (activeTab === "analogy" ? " lb-tab-active" : "")
+          }
+          onClick={() => {
+            setActiveTab("analogy");
+            onTabChange?.("analogy");
+          }}
+        >
+          Analogy
+        </button>
+
+        <button
+          className={
+            "lb-tab-btn" + (activeTab === "quiz" ? " lb-tab-active" : "")
+          }
+          onClick={() => {
+            setActiveTab("quiz");
+            onTabChange?.("quiz");
+          }}
+        >
+          Quiz Me
+        </button>
+      </div>
+
+      {/* BODY */}
+      <div id="lb-panel-tab-body">{renderActiveTabBody()}</div>
+
+      {/* FOOTER */}
+      <div id="lb-panel-footer"><button onClick={handleAddClick}>Make Card</button></div>
+      
+      {/* {sourceText ? (
+        <div id="lb-panel-footer">
+          <div id="lb-panel-source">
+            Based on: <span className="lb-source-frag">{sourceText}</span>
+          </div>
+          <button onClick={handleAddClick}>Make Card</button>
+        </div>
+      ) : null} */}
     </div>
   );
 };
