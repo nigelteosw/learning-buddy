@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { db, Card } from '@/lib/db'; // 1. Import Card type
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AddCardForm } from '@/components/AddCardForm';
-import { ReviewList } from '@/components/review-list/ReviewList'; // Remove this
-import { ReviewGame } from '@/components/review-game/ReviewGame'; // Keep this
+import { ReviewList } from '@/components/review-list/ReviewList';
+import { TestGame } from '@/components/test-game/TestGame'; // Keep this
 import { ImportExport } from '@/components/ImportExport';
+
 
 function App() {
   const [frontText, setFrontText] = useState('');
   const [originalHighlight, setOriginalHighlight] = useState('');
-  const [activeTab, setActiveTab] = useState<'addCard' | 'review' | 'browseCards' | 'importExport'>('addCard');
+  const [activeTab, setActiveTab] = useState<'addCard' | 'test' | 'browseCards' | 'importExport'>('addCard');
   const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
   const [initialPrefillData, setInitialPrefillData] = useState<{ heading: string; back: string } | null>(null);
 
@@ -19,7 +20,7 @@ function App() {
   // Message listener (no changes needed here)
   useEffect(() => {
     const messageListener = (message: any) => {
-      // ... (handles 'explain-text', 'show-review', 'prefill-data')
+      // ... (handles 'explain-text', 'show-Test', 'prefill-data')
       if (message.type === 'explain-text' && message.text) {
         console.log('App received explain-text:', message.text);
         setOriginalHighlight(message.text);
@@ -28,9 +29,9 @@ function App() {
         setInitialPrefillData(null);
         setActiveTab('addCard');
       }
-      if (message.type === 'show-review') {
-        console.log('App received show-review');
-        setActiveTab('review');
+      if (message.type === 'show-Test') {
+        console.log('App received show-Test');
+        setActiveTab('test');
       }
       if (message.type === 'prefill-data' && message.data) {
         console.log('App received prefill-data:', message.data);
@@ -56,7 +57,7 @@ function App() {
     setFrontText('');
     setInitialPrefillData(null);
     setCardToEdit(null);
-    setActiveTab('review'); // Switch to review after save might be desired
+    setActiveTab('test'); // Switch to Test after save might be desired
   };
 
   // Handler for edit requests (keep for now, might use later)
@@ -81,15 +82,15 @@ function App() {
         >
           {cardToEdit ? 'Edit Card' : 'Add Card'}
         </button>
-        {/* Review Tab Button (shows total card count) */}
+        {/* Test Tab Button (shows total card count) */}
         <button
-          className={`px-4 py-2 text-sm ${activeTab === 'review'
+          className={`px-4 py-2 text-sm ${activeTab === 'test'
               ? 'border-b-2 border-blue-500 text-white'
               : 'text-zinc-400'
             }`}
-          onClick={() => setActiveTab('review')}
+          onClick={() => setActiveTab('test')}
         >
-          Review 
+          Test 
         </button>
         {/* Browse Cards Tab Button */}
         <button
@@ -121,12 +122,12 @@ function App() {
         cardToEdit={cardToEdit}
       />)}
 
-      {/* --- REVIEW GAME TAB --- */}
-      {activeTab === 'review' && (<ReviewGame />)}
+      {/* --- Test GAME TAB --- */}
+      {activeTab === 'test' && (<TestGame />)}
 
       {/* --- NEW: ALL CARDS TAB --- */}
       {activeTab === 'browseCards' && (
-        // We'll use your existing ReviewList component here
+        // We'll use your existing TestList component here
         <ReviewList onEditRequest={handleEditRequest} />
       )}
 

@@ -20,7 +20,7 @@ enum GameState {
   NotStarted, Loading, Playing, Finished,
 }
 
-export function ReviewGame() {
+export function TestGame() {
   const [gameState, setGameState] = useState<GameState>(GameState.NotStarted);
   // Store ALL cards loaded initially to pick distractors
   const [allCards, setAllCards] = useState<Card[]>([]); 
