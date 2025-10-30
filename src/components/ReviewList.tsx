@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { db, Card } from "@/lib/db";
 import { useLiveQuery } from "dexie-react-hooks";
-
+import { QuizView, parseQuiz, ParsedQuiz } from "./QuizView";
+import { promptClient } from "@/lib/modelClients/promptClient";
 
 type ReviewListProps = {
   onEditRequest: (card: Card) => void;
@@ -10,6 +11,13 @@ type ReviewListProps = {
 export function ReviewList({ onEditRequest }: ReviewListProps) {
   // 1. The database query now lives inside this component
   const allCards = useLiveQuery(() => db.cards.orderBy("concept").toArray());
+  const [openCardId, setOpenCardId] = useState<number | null>(null);
+  const [quizzingCardId, setQuizzingCardId] = useState<number | null>(null);
+
+  // State lifted from QuizView
+  const [quiz, setQuiz] = useState<ParsedQuiz | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 2. The delete logic also lives here
   const handleDeleteCard = async (id: number) => {
@@ -23,6 +31,40 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
     }
   };
 
+  const handleGenerateQuiz = useCallback(async (card: Card) => {
+    setQuizzingCardId(card.id ?? null);
+    setIsLoading(true);
+    setError(null);
+    setQuiz(null);
+
+    try {
+      await promptClient.initFromUserGesture();
+      const stream = await promptClient.generateQuizStream(
+        `${card.front}\n\n${card.back}`
+      );
+      let fullText = "";
+      for await (const chunk of stream) {
+        fullText += chunk;
+      }
+      const parsed = parseQuiz(fullText);
+      if (parsed) {
+        setQuiz(parsed);
+      } else {
+        setError("Failed to generate a valid quiz. Please try again.");
+      }
+    } catch (e) {
+      console.error("Quiz generation failed:", e);
+      setError("An error occurred while generating the quiz.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const resetQuizState = () => {
+    setQuizzingCardId(null);
+    setQuiz(null);
+  };
+
   // 3. The JSX is updated
   return (
     <div className="space-y-2">
@@ -33,18 +75,50 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
       {allCards?.map((card) => (
         <details
           key={card.id}
+          open={openCardId === card.id}
+          onToggle={(e) => {
+            if ((e.target as HTMLDetailsElement).open) {
+              setOpenCardId(card.id ?? null);
+              resetQuizState();
+            } else if (openCardId === card.id) {
+              setOpenCardId(null);
+              resetQuizState();
+            }
+          }}
           className="group rounded-lg border border-zinc-700 bg-zinc-800 p-3"
         >
           <summary className="flex cursor-pointer items-center justify-between font-semibold text-blue-400">
             {card.concept}
 
-            {/* 3. Add a div to hold both buttons */}
             <div className="flex items-center space-x-2">
+              {/* --- RESET BUTTON --- */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  resetQuizState();
+                }}
+                className="p-1.5 rounded-md transition
+    text-zinc-500 hover:text-yellow-400
+    hover:bg-zinc-800/40 active:scale-95"
+                title="Reset"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="h-4 w-4"
+                >
+                  <path d="M3 3v6h6" />
+                  <path d="M3.51 9A9 9 0 1 1 9 20.49" />
+                </svg>
+              </button>
+
               {/* --- EDIT BUTTON --- */}
               <button
                 onClick={() => onEditRequest(card)}
                 className="p-1 text-zinc-500 hover:text-green-400"
-                onClickCapture={(e) => e.preventDefault()}
                 title="Edit card"
               >
                 <svg
@@ -67,7 +141,6 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
               <button
                 onClick={() => handleDeleteCard(card.id!)}
                 className="p-1 text-zinc-500 hover:text-red-400"
-                onClickCapture={(e) => e.preventDefault()}
                 title="Delete card"
               >
                 <svg
@@ -90,12 +163,33 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
           <div className="mt-2 space-y-2 border-t border-zinc-700 pt-2">
             <div>
               <h4 className="font-medium text-zinc-400">Summary</h4>
-              <p className="mt-1 text-zinc-100">{card.front}</p>
+              <p
+                className={`mt-1 text-zinc-100 transition-all ${quizzingCardId === card.id
+                    ? "cursor-pointer blur-sm hover:blur-none"
+                    : ""
+                  }`}
+              >
+                {card.front}
+              </p>
             </div>
             <div>
               <h4 className="font-medium text-zinc-400">Explanation</h4>
-              <p className="mt-1 text-zinc-100">{card.back}</p>
+              <p
+                className={`mt-1 text-zinc-100 transition-all ${quizzingCardId === card.id
+                    ? "cursor-pointer blur-sm hover:blur-none"
+                    : ""
+                  }`}
+              >
+                {card.back}
+              </p>
             </div>
+            <QuizView
+              card={card}
+              quiz={quizzingCardId === card.id ? quiz : null}
+              isLoading={quizzingCardId === card.id ? isLoading : false}
+              error={quizzingCardId === card.id ? error : null}
+              onGenerate={() => handleGenerateQuiz(card)}
+            />
           </div>
         </details>
       ))}
