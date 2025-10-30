@@ -82,9 +82,7 @@ class PromptClient {
 
     // Check API presence early.
     if (!hasLanguageModel()) {
-      throw new Error(
-        "Prompt API (LanguageModel) not available in this context."
-      );
+      throw new Error("Prompt API (LanguageModel) not available in this context.");
     }
 
     // Merge global opts + one-time init overrides.
@@ -100,18 +98,6 @@ class PromptClient {
       topK: params?.topK ?? this.opts.topK,
     };
 
-    // The API requires: either BOTH (temperature, topK) are provided or NEITHER.
-    // If not both provided, we fill them from LanguageModel.params().
-    if (merged.temperature === undefined || merged.topK === undefined) {
-      const modelParams = await getModelParams();
-      if (merged.temperature === undefined) {
-        merged.temperature = modelParams.defaultTemperature;
-      }
-      if (merged.topK === undefined) {
-        merged.topK = modelParams.defaultTopK;
-      }
-    }
-
     // Build initialPrompts for create():
     // We ALWAYS prepend the systemPrompt (if non-empty) as role:"system".
     const initialPrompts: PromptMessage[] = [];
@@ -126,9 +112,6 @@ class PromptClient {
     }
 
     // Best-effort availability() check per spec.
-    // Spec note: "Always pass the same options to availability() that you use
-    // in prompt() or promptStreaming()." They don't show structured args,
-    // so we just call it plain. We'll catch errors gracefully.
     try {
       if ((self as any).LanguageModel.availability) {
         await (self as any).LanguageModel.availability();
@@ -137,10 +120,51 @@ class PromptClient {
       console.warn("LanguageModel.availability() threw:", err);
     }
 
-    // Prepare create() options for LanguageModel.create().
-    const createOptions: Record<string, any> = {
+    // ---- get defaults & normalize user-provided tuning -----------------
+    const modelParams = await getModelParams();
+    // console.debug("LanguageModel.params()", modelParams); // optional debug
+
+    // Start from merged
+    let { temperature, topK } = {
       temperature: merged.temperature,
       topK: merged.topK,
+    };
+
+    // If caller omitted either, try defaults
+    if (temperature === undefined || topK === undefined) {
+      temperature ??= modelParams?.defaultTemperature;
+      topK ??= modelParams?.defaultTopK;
+    }
+
+    // Some devices/browsers report no topK support (maxTopK = 0).
+    const supportsTopK =
+      typeof modelParams?.maxTopK === "number" && modelParams.maxTopK > 0;
+
+    if (supportsTopK) {
+      // sanitize topK into valid range [1, maxTopK]
+      if (typeof topK !== "number" || !Number.isFinite(topK)) {
+        topK = modelParams.defaultTopK;
+      }
+      topK = Math.round(topK as number);
+      if ((topK as number) < 1) topK = 1;
+      if ((topK as number) > modelParams.maxTopK) topK = modelParams.maxTopK;
+
+      // sanitize temperature into [0, maxTemperature]
+      const maxT =
+        typeof modelParams.maxTemperature === "number" ? modelParams.maxTemperature : 2;
+      if (typeof temperature !== "number" || !Number.isFinite(temperature)) {
+        temperature = modelParams.defaultTemperature ?? 1;
+      }
+      if (temperature < 0) temperature = 0;
+      if (temperature > maxT) temperature = maxT;
+    } else {
+      // Device does not support topK -> must omit BOTH tuning params
+      temperature = undefined;
+      topK = undefined;
+    }
+
+    // ---- build create() options ----------------------------------------
+    const createOptions: Record<string, any> = {
       initialPrompts,
       expectedInputs: merged.expectedInputs,
       expectedOutputs: merged.expectedOutputs,
@@ -154,6 +178,16 @@ class PromptClient {
         }
       },
     };
+
+    // Only include tuning if valid & supported (spec: either both or neither)
+    if (supportsTopK && temperature !== undefined && topK !== undefined) {
+      createOptions.temperature = temperature;
+      createOptions.topK = topK;
+    }
+
+    // Persist cleaned values back into opts for future calls/clones
+    merged.temperature = temperature;
+    merged.topK = topK;
 
     // Actually create and store session.
     this.creating = (self as any).LanguageModel.create(createOptions)
@@ -169,6 +203,7 @@ class PromptClient {
 
     await this.creating;
   }
+
 
   async prompt(
     input: string | PromptMessage[],
