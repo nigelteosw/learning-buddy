@@ -8,7 +8,7 @@ import {
   type PromptRole,
   type PromptSession,
 } from "@/types/promptTypes";
-import { checkModelAvailability } from "./language";
+import { checkModelAvailability } from "@/lib/utils/language";
 
 function hasLanguageModel(): boolean {
   return typeof (self as any).LanguageModel !== "undefined";

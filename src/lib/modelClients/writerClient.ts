@@ -7,22 +7,8 @@ import {
   type WriterDownloadProgressEvent,
   type WriterAvailability,
   SUPPORTED_LANGUAGES, // Import constants/types as needed
-  type SupportedLanguage,
-} from "@/types/writerTypes";
-import { checkModelAvailability } from "./language";
-
-// Language Checking
-function isSupportedLanguage(lang: string): lang is SupportedLanguage {
-  return (SUPPORTED_LANGUAGES as readonly string[]).includes(lang);
-}
-
-function getDefaultLanguage(): SupportedLanguage {
-  const browserLang = (navigator.language || "en").slice(0, 2);
-  if (isSupportedLanguage(browserLang)) {
-    return browserLang;
-  }
-  return "en";
-}
+} from "@/types/writerTypes"; 
+import { checkModelAvailability, getDefaultLanguage } from '@/lib/utils/language';
 
 export const defaultWriterOpts: GlobalWriterOpts = {
   sharedContext: "Simplify this concept for me.",

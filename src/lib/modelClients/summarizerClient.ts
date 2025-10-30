@@ -6,7 +6,7 @@ import {
   type SummarizerDownloadProgressEvent,
   type SummarizerAvailability, // Import the type alias
 } from "@/types/summarizerTypes";
-import { checkModelAvailability, getDefaultLanguage } from "./language";
+import { checkModelAvailability, getDefaultLanguage } from "@/lib/utils/language";
 
 export const defaultSummarizerOpts: GlobalSummarizerOpts = {
   sharedContext:

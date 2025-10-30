@@ -67,7 +67,15 @@ function renderPanel() {
   if (panelHost) panelHost.style.pointerEvents = "auto";
 
   const handleClose = () => {
+    // Dispose of the clients to clean up sessions.
+    writerClient.dispose();
+    summarizerClient.dispose();
+    promptClient.dispose();
+
     root.render(null);
+    if (panelHost) {
+      panelHost.style.pointerEvents = "none";
+    }
   };
 
   const handleAdd = (front: string, back: string) => {
@@ -114,6 +122,15 @@ function renderPanel() {
           !data.keyIdeasText &&
           !data.keyIdeasLoading
         ) {
+          // Re-initialize the client to ensure the session is valid after a potential abort
+          await Promise.all([
+            writerClient.initFromUserGesture(defaultWriterOpts),
+            summarizerClient.initFromUserGesture(defaultSummarizerOpts),
+            promptClient.initFromUserGesture(defaultPromptOpts),
+          ]);
+          await promptClient.initFromUserGesture({
+            ...defaultPromptOpts,
+          });
           streamPromptIntoField(
             () => promptClient.generateTakeawaysStream(data.sourceText),
             "keyIdeasText",
@@ -129,6 +146,15 @@ function renderPanel() {
           !data.analogyText &&
           !data.analogyLoading
         ) {
+          // Re-initialize the client
+          await Promise.all([
+            writerClient.initFromUserGesture(defaultWriterOpts),
+            summarizerClient.initFromUserGesture(defaultSummarizerOpts),
+            promptClient.initFromUserGesture(defaultPromptOpts),
+          ]);
+          await promptClient.initFromUserGesture({
+            ...defaultPromptOpts,
+          });
           streamPromptIntoField(
             () => promptClient.generateAnalogyStream(data.sourceText),
             "analogyText",
@@ -144,6 +170,15 @@ function renderPanel() {
           !data.quizText &&
           !data.quizLoading
         ) {
+          // Re-initialize the client
+          await Promise.all([
+            writerClient.initFromUserGesture(defaultWriterOpts),
+            summarizerClient.initFromUserGesture(defaultSummarizerOpts),
+            promptClient.initFromUserGesture(defaultPromptOpts),
+          ]);
+          await promptClient.initFromUserGesture({
+            ...defaultPromptOpts,
+          });
           streamPromptIntoField(
             () => promptClient.generateQuizStream(data.sourceText),
             "quizText",
@@ -199,14 +234,14 @@ async function streamPromptIntoField(
       renderPanel();
     }
 
-    if (!panelData) return;
+    if (!panelData) return; // Panel might have been closed
     panelData[loadingField] = false;
     if ((panelData[textField] as string).trim() === "") {
       panelData[textField] = "No output.";
     }
     renderPanel();
   } catch (err) {
-    console.error("streamPromptIntoField error:", err);
+    console.error(`streamPromptIntoField error for ${textField}:`, err);
     if (!panelData) return;
     panelData[loadingField] = false;
     panelData[errorField] = "Error generating content.";
@@ -389,7 +424,6 @@ const setupButton = (isEnabled: boolean) => {
     renderPanel();
   }
 }); // End setOnLearnClick
-
     currentButton.initializeListeners();
   } else if (!isEnabled && currentButton) {
     console.log("[content] Disabling button");

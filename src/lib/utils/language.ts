@@ -1,7 +1,7 @@
 import {
   SUPPORTED_LANGUAGES,
   type SupportedLanguage,
-} from "@/types/writerTypes"; // Assuming this is a shared type definition
+} from "@/types/writerTypes";
 
 /**
  * Checks if a language code is supported by the models.
