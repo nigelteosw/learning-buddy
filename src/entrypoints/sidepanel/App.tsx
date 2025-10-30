@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { db, Card } from '@/lib/db'; // 1. Import Card type
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AddCardForm } from '@/components/AddCardForm';
-import { ReviewList } from '@/components/ReviewList'; // Remove this
-import { ReviewGame } from '@/components/reviewgame/ReviewGame'; // Keep this
+import { ReviewList } from '@/components/review-list/ReviewList'; // Remove this
+import { ReviewGame } from '@/components/review-game/ReviewGame'; // Keep this
 import { ImportExport } from '@/components/ImportExport';
 
 function App() {

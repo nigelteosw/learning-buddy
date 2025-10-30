@@ -19,6 +19,7 @@ export function AddCardForm({
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
   const [heading, setHeading] = useState(''); // Correct state name
+  const [tags, setTags] = useState(''); // State for tags as a comma-separated string
 
   useEffect(() => {
     if (cardToEdit) {
@@ -26,11 +27,13 @@ export function AddCardForm({
       setHeading(cardToEdit.concept ?? ''); // Use heading field from Card
       setFrontText(cardToEdit.front ?? '');
       setBackText(cardToEdit.back ?? '');
+      setTags(cardToEdit.tags?.join(', ') ?? ''); // Join array to string for input
     } else if (initialPrefillData) {
       // PREFILL MODE: Coming from floating panel
       setHeading('');
       setFrontText(initialPrefillData.heading || ''); // Use initialFrontText passed from App
       setBackText(initialPrefillData.back || '');
+      setTags('');
     } else {
       // ADD MODE: Coming from direct highlight or manual entry
       setFrontText(initialFrontText || initialHighlight || '');
@@ -52,6 +55,9 @@ export function AddCardForm({
       return;
     }
 
+    // Convert comma-separated string to a clean array of tags
+    const tagsArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+
     try {
       if (cardToEdit) {
         // UPDATE EXISTING CARD
@@ -59,6 +65,7 @@ export function AddCardForm({
           concept: heading, // FIX: Use heading state
           front: frontText,
           back: backText,
+          tags: tagsArray,
         });
         alert('Card updated!');
       } else {
@@ -71,6 +78,7 @@ export function AddCardForm({
           dueDate: new Date(),
           interval: 1,
           easeFactor: 2.5,
+          tags: tagsArray,
         };
         await db.cards.add(newCard);
         alert('Card saved!');
@@ -108,6 +116,24 @@ export function AddCardForm({
             value={heading} // Correctly uses heading state
             onChange={(e) => setHeading(e.target.value)} // Correctly uses setHeading
             placeholder="e.g., 'Kalman Filters'"
+            className="block w-full rounded-md border border-zinc-600 bg-zinc-800 p-2 text-white placeholder-zinc-500"
+          />
+        </div>
+
+        {/* Tags Input */}
+        <div>
+          <label
+            htmlFor="tags"
+            className="mb-1 block text-sm font-medium text-zinc-400"
+          >
+            Tags (comma-separated)
+          </label>
+          <input
+            id="tags"
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder="e.g., programming, javascript, react"
             className="block w-full rounded-md border border-zinc-600 bg-zinc-800 p-2 text-white placeholder-zinc-500"
           />
         </div>
