@@ -4,11 +4,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { AddCardForm } from '@/components/AddCardForm';
 import { ReviewList } from '@/components/ReviewList'; // Remove this
 import { ReviewGame } from '@/components/reviewgame/ReviewGame'; // Keep this
+import { ImportExport } from '@/components/ImportExport';
 
 function App() {
   const [frontText, setFrontText] = useState('');
   const [originalHighlight, setOriginalHighlight] = useState('');
-  const [activeTab, setActiveTab] = useState<'addCard' | 'review' | 'browseCards'>('addCard');
+  const [activeTab, setActiveTab] = useState<'addCard' | 'review' | 'browseCards' | 'importExport'>('addCard');
   const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
   const [initialPrefillData, setInitialPrefillData] = useState<{ heading: string; back: string } | null>(null);
 
@@ -65,6 +66,7 @@ function App() {
     setActiveTab('addCard');
   };
 
+
   return (
     <main className="min-h-screen space-y-4 bg-zinc-900 p-4 font-sans text-white">
       {/* --- TABS --- */}
@@ -75,7 +77,7 @@ function App() {
               ? 'border-b-2 border-blue-500 text-white'
               : 'text-zinc-400'
             }`}
-          onClick={() => { /* ... reset state ... */ setActiveTab('addCard'); }}
+          onClick={() => { setActiveTab('addCard'); }}
         >
           {cardToEdit ? 'Edit Card' : 'Add Card'}
         </button>
@@ -99,6 +101,15 @@ function App() {
         >
           Cards ({cardCount})
         </button>
+        <button
+          className={`ml-auto px-4 py-2 text-sm ${activeTab === 'importExport'
+              ? 'border-b-2 border-blue-500 text-white'
+              : 'text-zinc-400'
+            }`}
+          onClick={() => setActiveTab('importExport')}
+        >
+          Import/Export
+        </button>
       </div>
 
       {/* --- ADD CARD TAB --- */}
@@ -117,6 +128,11 @@ function App() {
       {activeTab === 'browseCards' && (
         // We'll use your existing ReviewList component here
         <ReviewList onEditRequest={handleEditRequest} />
+      )}
+
+      {/* 6. NEW: IMPORT/EXPORT TAB CONTENT --- */}
+      {activeTab === 'importExport' && (
+        <ImportExport />
       )}
     </main>
   );
