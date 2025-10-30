@@ -121,7 +121,7 @@ export function AddCardForm({
         </div>
 
         {/* Tags Input */}
-        <div>
+        {/* <div>
           <label
             htmlFor="tags"
             className="mb-1 block text-sm font-medium text-zinc-400"
@@ -136,7 +136,7 @@ export function AddCardForm({
             placeholder="e.g., programming, javascript, react"
             className="block w-full rounded-md border border-zinc-600 bg-zinc-800 p-2 text-white placeholder-zinc-500"
           />
-        </div>
+        </div> */}
 
         {/* ... (Rest of JSX is likely correct) ... */}
          {/* Front */}
