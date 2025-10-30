@@ -55,6 +55,12 @@ export function QuizView({ card, quiz, isLoading, error, onGenerate }: QuizViewP
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
 
+  // Reset selected option and revealed state when a new quiz is generated
+  useEffect(() => {
+    setSelectedOption(null);
+    setIsRevealed(false);
+  }, [quiz]);
+
   const handleOptionClick = (key: string) => {
     if (isRevealed) return;
     setSelectedOption(key);
