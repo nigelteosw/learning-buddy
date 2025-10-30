@@ -8,6 +8,7 @@ import {
   type PromptRole,
   type PromptSession,
 } from "@/types/promptTypes";
+import { checkModelAvailability } from "./language";
 
 function hasLanguageModel(): boolean {
   return typeof (self as any).LanguageModel !== "undefined";
@@ -60,6 +61,7 @@ class PromptClient {
   private session: PromptSession | null = null;
   private creating?: Promise<PromptSession>;
   private opts: GlobalPromptOpts = { ...defaultPromptOpts };
+  private availabilityStatus: PromptAvailability | null = null;
 
   /**
    * Update the global defaults. Similar to writerClient.setOpts().
@@ -72,6 +74,9 @@ class PromptClient {
 
   async initFromUserGesture(params?: PromptCreateParams) {
     // If we already have a session, just bail.
+    // Reset availability status on re-init.
+    this.availabilityStatus = null;
+
     if (this.session) return;
 
     // If there is already a "creating" promise in flight, await that.
@@ -416,42 +421,25 @@ Correct Answer: ${correctLetter}
     return { inputUsage, inputQuota };
   }
 
-  async availability(): Promise<PromptAvailability> {
-    if (!hasLanguageModel()) {
-      console.warn("LanguageModel API not found on self.");
-      return "no-api";
+  async availability(
+    force: boolean = false
+  ): Promise<PromptAvailability> {
+    if (this.availabilityStatus && !force) {
+      return this.availabilityStatus;
     }
 
-    const lm: any = (self as any).LanguageModel;
-    if (!lm.availability) {
-      console.warn("LanguageModel.availability() not found.");
-      return "unknown";
-    }
-
-    try {
-      const state = await lm.availability();
-      const known: PromptAvailability[] = [
-        "available",
-        "downloadable",
-        "downloading",
-        "unavailable",
-        "unknown",
-        "no-api",
-      ];
-
-      if ((known as string[]).includes(state)) {
-        return state as PromptAvailability;
-      }
-
-      console.warn(
-        "LanguageModel.availability() returned unexpected state:",
-        state
-      );
-      return "unknown";
-    } catch (err) {
-      console.error("Error calling LanguageModel.availability():", err);
-      return "unavailable";
-    }
+    const knownStates: readonly PromptAvailability[] = [
+      "available",
+      "downloadable",
+      "downloading",
+      "unavailable",
+      "unknown",
+      "no-api", // This is a custom state, but we can include it.
+    ];
+    // The base check already handles the 'no-api' case if LanguageModel is missing.
+    const status = await checkModelAvailability("LanguageModel", knownStates);
+    this.availabilityStatus = status;
+    return status;
   }
 
   /**
@@ -467,6 +455,7 @@ Correct Answer: ${correctLetter}
     }
     this.session = null;
     this.creating = undefined;
+    this.availabilityStatus = null;
   }
 }
 

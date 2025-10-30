@@ -9,6 +9,7 @@ import {
   SUPPORTED_LANGUAGES, // Import constants/types as needed
   type SupportedLanguage,
 } from "@/types/writerTypes";
+import { checkModelAvailability } from "./language";
 
 // Language Checking
 function isSupportedLanguage(lang: string): lang is SupportedLanguage {
@@ -36,6 +37,8 @@ class WriterClient {
   private session: WriterSession | null = null;
   private creating?: Promise<WriterSession>; // Use real type
   private opts: GlobalWriterOpts = defaultWriterOpts;
+  private availabilityStatus: WriterAvailability | "no-api" | "unknown" | null =
+    null;
 
   setOpts(next: Partial<GlobalWriterOpts>) {
     this.opts = { ...this.opts, ...next };
@@ -43,6 +46,8 @@ class WriterClient {
 
   /** Must be called from a user gesture (click) in content/popup */
   async initFromUserGesture(params?: CreateParams) {
+    // Reset availability status on re-init.
+    this.availabilityStatus = null;
     if (this.session) return;
     if (this.creating) {
       await this.creating;
@@ -135,40 +140,23 @@ class WriterClient {
   /**
    * Checks availability of the writer.
    */
-  async availability(): Promise<WriterAvailability | "no-api" | "unknown"> {
-    if (!self.Writer) {
-      console.warn("Writer API not found on self.");
-      return "no-api"; // Return the specific 'no-api' string
-    }
-    if (!self.Writer.availability) {
-      console.warn("Writer.availability() method not found.");
-      return "unknown"; // Return the specific 'unknown' string
+  async availability(
+    force: boolean = false
+  ): Promise<WriterAvailability | "no-api" | "unknown"> {
+    if (this.availabilityStatus && !force) {
+      return this.availabilityStatus;
     }
 
-    try {
-      const state = await self.Writer.availability();
-
-      // Define the known states from your type
-      const knownStates: WriterAvailability[] = [
-        "available",
-        "downloadable",
-        "downloading",
-        "unavailable",
-        "unknown",
-      ];
-
-      // 3. Check if the returned state is one of the known ones
-      if ((knownStates as string[]).includes(state)) {
-        // 4. Cast to your type alias
-        return state as WriterAvailability;
-      }
-
-      console.warn("Writer.availability() returned unexpected state:", state);
-      return "unknown"; // Fallback to 'unknown' for unexpected states
-    } catch (e) {
-      console.error("Error calling Writer.availability():", e);
-      return "unavailable"; // Treat errors as 'unavailable'
-    }
+    const knownStates: readonly WriterAvailability[] = [
+      "available",
+      "downloadable",
+      "downloading",
+      "unavailable",
+      "unknown",
+    ];
+    const status = await checkModelAvailability("Writer", knownStates);
+    this.availabilityStatus = status;
+    return status;
   }
 
   dispose() {
@@ -179,6 +167,7 @@ class WriterClient {
     }
     this.session = null;
     this.creating = undefined;
+    this.availabilityStatus = null;
   }
 }
 

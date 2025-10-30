@@ -6,6 +6,7 @@ import {
   type SummarizerDownloadProgressEvent,
   type SummarizerAvailability, // Import the type alias
 } from "@/types/summarizerTypes";
+import { checkModelAvailability, getDefaultLanguage } from "./language";
 
 export const defaultSummarizerOpts: GlobalSummarizerOpts = {
   sharedContext:
@@ -13,11 +14,7 @@ export const defaultSummarizerOpts: GlobalSummarizerOpts = {
   type: "tldr",
   length: "short",
   format: "plain-text",
-  outputLanguage: ["en", "es", "ja"].includes(
-    (navigator.language || "en").slice(0, 2)
-  )
-    ? (navigator.language.slice(0, 2) as "en" | "es" | "ja")
-    : "en",
+  outputLanguage: getDefaultLanguage(),
 };
 
 
@@ -25,39 +22,38 @@ class SummarizerClient {
   private session: SummarizerSession | null = null;
   private creating?: Promise<SummarizerSession>;
   private opts: GlobalSummarizerOpts = defaultSummarizerOpts;
+  private availabilityStatus:
+    | SummarizerAvailability
+    | "no-api"
+    | "unknown"
+    | null = null;
 
   setOpts(next: Partial<GlobalSummarizerOpts>) {
     this.opts = { ...this.opts, ...next };
   }
 
-  async availability(): Promise<SummarizerAvailability | 'no-api' | 'unknown'> {
-    if (!self.Summarizer) {
-      console.warn("Summarizer API not found on self.");
-      return "no-api";
+  async availability(
+    force: boolean = false
+  ): Promise<SummarizerAvailability | "no-api" | "unknown"> {
+    if (this.availabilityStatus && !force) {
+      return this.availabilityStatus;
     }
-    if (!self.Summarizer.availability) {
-      console.warn("Summarizer.availability() method not found.");
-      return "unknown";
-    }
-    try {
-      const state = await self.Summarizer.availability();
-      // Define known states based on the imported type
-      const knownStates: SummarizerAvailability[] = [
-          'available', 'downloadable', 'downloading', 'unavailable', 'unknown'
-      ];
-      if ((knownStates as string[]).includes(state)) {
-         return state as SummarizerAvailability; // Cast to imported type
-      }
-      console.warn("Summarizer.availability() returned unexpected state:", state);
-      return "unknown";
-    } catch (e) {
-      console.error("Error calling Summarizer.availability():", e);
-      return "unavailable";
-    }
+    const knownStates: readonly SummarizerAvailability[] = [
+      "available",
+      "downloadable",
+      "downloading",
+      "unavailable",
+      "unknown",
+    ];
+    const status = await checkModelAvailability("Summarizer", knownStates);
+    this.availabilityStatus = status;
+    return status;
   }
 
   /** Must be called from a user gesture (click) in content/popup */
   async initFromUserGesture(params?: CreateParams) {
+    // Reset availability status on re-init.
+    this.availabilityStatus = null;
     if (this.session) return;
     if (this.creating) {
       await this.creating;
@@ -170,6 +166,7 @@ class SummarizerClient {
     }
     this.session = null;
     this.creating = undefined;
+    this.availabilityStatus = null;
   }
 }
 
