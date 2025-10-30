@@ -10,6 +10,9 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     
     // This adds the "@/*" import alias
