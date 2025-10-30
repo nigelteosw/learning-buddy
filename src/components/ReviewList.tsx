@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { db, Card } from "@/lib/db";
 import { useLiveQuery } from "dexie-react-hooks";
 import { QuizView, parseQuiz, ParsedQuiz } from "./QuizView";
 import { promptClient } from "@/lib/modelClients/promptClient";
+import { ReviewListControls } from "./ReviewListControls";
 
 type ReviewListProps = {
   onEditRequest: (card: Card) => void;
@@ -18,6 +19,10 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
   const [quiz, setQuiz] = useState<ParsedQuiz | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // State for searching and sorting
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState("concept");
 
   // 2. The delete logic also lives here
   const handleDeleteCard = async (id: number) => {
@@ -65,14 +70,51 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
     setQuiz(null);
   };
 
+  const filteredAndSortedCards = useMemo(() => {
+    if (!allCards) return [];
+
+    // 1. Filter based on searchTerm
+    const filtered = allCards.filter((card) => {
+      const term = searchTerm.toLowerCase();
+      return (
+        card.concept?.toLowerCase().includes(term) ||
+        card.front.toLowerCase().includes(term) ||
+        card.back.toLowerCase().includes(term)
+      );
+    });
+
+    // 2. Sort the filtered cards
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "createdAt_desc":
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        case "createdAt_asc":
+          return a.createdAt.getTime() - b.createdAt.getTime();
+        case "dueDate_asc":
+          return a.dueDate.getTime() - b.dueDate.getTime();
+        case "concept":
+        default:
+          return a.concept?.localeCompare(b.concept ?? "") ?? 0;
+      }
+    });
+  }, [allCards, searchTerm, sortBy]);
+
   // 3. The JSX is updated
   return (
     <div className="space-y-2">
       <h2 className="text-lg font-semibold text-white">Review Cards</h2>
-      {(!allCards || allCards.length === 0) && (
+
+      <ReviewListControls
+        searchTerm={searchTerm}
+        onSearchTermChange={setSearchTerm}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
+      />
+
+      {(!filteredAndSortedCards || filteredAndSortedCards.length === 0) && (
         <p className="text-zinc-400">You haven't saved any cards yet.</p>
       )}
-      {allCards?.map((card) => (
+      {filteredAndSortedCards?.map((card) => (
         <details
           key={card.id}
           open={openCardId === card.id}
