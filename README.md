@@ -11,6 +11,8 @@ An AI-powered learning assistant that runs directly in your browser, built with 
 
 ## Powered by Gemini Nano
 
+Learning Buddy addresses the problem of passive information consumption online. Students often highlight text without engaging deeply with it. Our extension transforms those highlights into interactive explanations, analogies, and quizzes - all powered locally by Gemini Nano, preserving privacy and enabling offline study.
+
 This extension leverages **Gemini Nano**, Google's most efficient model built to run directly on your device. This provides two key benefits:
 
 *   **Privacy-First:** Your highlighted text and learning data are processed locally. Nothing is sent to a server.
@@ -39,6 +41,14 @@ This extension leverages **Gemini Nano**, Google's most efficient model built to
 *   [React](https://react.dev/) - A JavaScript library for building user interfaces.
 *   [TypeScript](https://www.typescriptlang.org/) - Typed JavaScript at scale.
 *   [Node.js](https://nodejs.org/) - JavaScript runtime environment.
+
+### APIs Used
+
+*   **Gemini Nano (on-device LLM):** Accessed via Chrome's built-in AI for local, private, and offline-capable text generation and summarization.
+*   **Prompt API:** Used for interacting with the on-device model to generate explanations, analogies, and quizzes.
+*   **WXT APIs:** Utilized for the overall extension structure, including the background service worker, side panel, and content scripts.
+*   **Chrome Storage API (`storage.local`):** For local persistence of the user's flashcard databank.
+*   **Chrome Runtime and Tabs APIs:** For messaging between extension components and managing tab interactions.
 
 ## Getting Started
 
