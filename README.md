@@ -11,7 +11,7 @@ An AI-powered learning assistant that runs directly in your browser, built with 
 
 ## Powered by Gemini Nano
 
-Learning Buddy addresses the problem of passive information consumption online. Students often highlight text without engaging deeply with it. Our extension transforms those highlights into interactive explanations, analogies, and quizzes - all powered locally by Gemini Nano, preserving privacy and enabling offline study.
+Learning Buddy addresses the problem of passive information consumption online. Students often highlight text without engaging deeply with it. This extension transforms those highlights into interactive explanations, analogies, and quizzes - all powered locally by Gemini Nano, preserving privacy and enabling offline study.
 
 This extension leverages **Gemini Nano**, Google's most efficient model built to run directly on your device. This provides two key benefits:
 
