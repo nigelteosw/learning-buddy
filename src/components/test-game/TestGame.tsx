@@ -157,7 +157,12 @@ export function TestGame() {
 
   // --- Reset to Start Screen ---
   const handleRestart = () => {
-    setGameState(GameState.NotStarted);
+    if (
+      gameState !== GameState.Playing ||
+      window.confirm("Are you sure you want to quit? Your progress will be lost.")
+    ) {
+      setGameState(GameState.NotStarted);
+    }
   };
 
   // --- Render Logic ---
@@ -207,8 +212,16 @@ export function TestGame() {
 
   return (
     <div className="space-y-4">
-      <div className="text-center text-sm text-zinc-400">
-        Question {currentCardIndex + 1} of {sessionCards.length}
+      <div className="relative flex items-center justify-center">
+        <button
+          onClick={handleRestart}
+          className="absolute left-0 rounded-md px-2 py-1 text-sm text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white"
+        >
+          &lt; Quit
+        </button>
+        <div className="text-sm text-zinc-400">
+          Question {currentCardIndex + 1} of {sessionCards.length}
+        </div>
       </div>
 
       {/* --- Question Prompt --- */}
