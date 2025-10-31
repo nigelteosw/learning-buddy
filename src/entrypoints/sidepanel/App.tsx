@@ -20,7 +20,7 @@ function App() {
   // Message listener (no changes needed here)
   useEffect(() => {
     const messageListener = (message: any) => {
-      // ... (handles 'explain-text', 'show-Test', 'prefill-data')
+      // ... (handles 'explain-text', 'show-test', 'prefill-data')
       if (message.type === 'explain-text' && message.text) {
         console.log('App received explain-text:', message.text);
         setOriginalHighlight(message.text);
@@ -29,8 +29,8 @@ function App() {
         setInitialPrefillData(null);
         setActiveTab('addCard');
       }
-      if (message.type === 'show-Test') {
-        console.log('App received show-Test');
+      if (message.type === 'show-test') {
+        console.log('App received show-test');
         setActiveTab('test');
       }
       if (message.type === 'prefill-data' && message.data) {

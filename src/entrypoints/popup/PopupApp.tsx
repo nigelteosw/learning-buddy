@@ -62,7 +62,7 @@ function PopupApp() {
    * Opens the side panel for the current active tab and sends a message
    * instructing it to switch to the 'review' view.
    */
-  const handleOpenReview = async () => {
+  const handleOpenTest = async () => {
     try {
       const [activeTab] = await browser.tabs.query({
         active: true,
@@ -101,7 +101,7 @@ function PopupApp() {
 
       // --- Send Message (only if panel was opened successfully) ---
       await new Promise((resolve) => setTimeout(resolve, 150));
-      await browser.runtime.sendMessage({ type: "show-review" });
+      await browser.runtime.sendMessage({ type: "show-test" });
     } catch (error) {
       console.error("handleOpenReview: Unexpected error:", error);
     } finally {
@@ -145,7 +145,7 @@ function PopupApp() {
               Add New Card
             </button>
             <button
-              onClick={handleOpenReview}
+              onClick={handleOpenTest}
               className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
             >
               Test Me!
