@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { db, Card } from "@/lib/db";
+import { db, Card, getPaginatedCards } from "@/lib/db";
 import { useLiveQuery } from "dexie-react-hooks";
 import { QuizView, parseQuiz, ParsedQuiz } from "./QuizView";
 import { promptClient } from "@/lib/modelClients/promptClient";
@@ -10,8 +10,6 @@ type ReviewListProps = {
 };
 
 export function ReviewList({ onEditRequest }: ReviewListProps) {
-  // 1. The database query now lives inside this component
-  const allCards = useLiveQuery(() => db.cards.orderBy("concept").toArray());
   const [openCardId, setOpenCardId] = useState<number | null>(null);
   const [quizzingCardId, setQuizzingCardId] = useState<number | null>(null);
 
@@ -23,8 +21,28 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
   // State for searching and sorting
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("concept");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  // 2. The delete logic also lives here
+  // The database query now uses our paginated function
+  const paginatedData = useLiveQuery(
+    () =>
+      getPaginatedCards({
+        page: currentPage,
+        limit: itemsPerPage,
+        sortBy: sortBy.replace(/_asc|_desc/g, ''), // Dexie's sortBy uses the key name
+        searchTerm,
+      }),
+    [currentPage, sortBy, searchTerm], // Dependencies for the live query
+    { cards: [], totalCount: 0 } // Initial value
+  );
+
+  const cards = paginatedData?.cards ?? [];
+  const totalCount = paginatedData?.totalCount ?? 0;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+
+
+  // The delete logic also lives here
   const handleDeleteCard = async (id: number) => {
     if (confirm("Are you sure you want to delete this card?")) {
       try {
@@ -70,36 +88,20 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
     setQuiz(null);
   };
 
-  const filteredAndSortedCards = useMemo(() => {
-    if (!allCards) return [];
+  // Effect to reset page when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortBy]);
 
-    // 1. Filter based on searchTerm
-    const filtered = allCards.filter((card) => {
-      const term = searchTerm.toLowerCase();
-      return (
-        card.concept?.toLowerCase().includes(term) ||
-        card.front.toLowerCase().includes(term) ||
-        card.back.toLowerCase().includes(term)
-      );
-    });
+  // Sort logic is now applied within the DB query, but we need to handle reverse for 'desc'
+  const sortedCards = useMemo(() => {
+    if (sortBy.endsWith('_desc')) {
+      // The DB query already sorted it ascending, so we just reverse the final page.
+      return [...cards].reverse();
+    }
+    return cards;
+  }, [cards, sortBy]);
 
-    // 2. Sort the filtered cards
-    return filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "createdAt_desc":
-          return b.createdAt.getTime() - a.createdAt.getTime();
-        case "createdAt_asc":
-          return a.createdAt.getTime() - b.createdAt.getTime();
-        case "dueDate_asc":
-          return a.dueDate.getTime() - b.dueDate.getTime();
-        case "concept":
-        default:
-          return a.concept?.localeCompare(b.concept ?? "") ?? 0;
-      }
-    });
-  }, [allCards, searchTerm, sortBy]);
-
-  // 3. The JSX is updated
   return (
     <div className="space-y-2">
       <h2 className="text-lg font-semibold text-white">Review Cards</h2>
@@ -111,10 +113,16 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
         onSortByChange={setSortBy}
       />
 
-      {(!filteredAndSortedCards || filteredAndSortedCards.length === 0) && (
+      {totalCount > 0 && (
+        <p className="text-sm text-zinc-400">
+          Showing {cards.length} of {totalCount} cards.
+        </p>
+      )}
+
+      {totalCount === 0 && (
         <p className="text-zinc-400">You haven't saved any cards yet.</p>
       )}
-      {filteredAndSortedCards?.map((card) => (
+      {sortedCards.map((card) => (
         <details
           key={card.id}
           open={openCardId === card.id}
@@ -245,6 +253,32 @@ export function ReviewList({ onEditRequest }: ReviewListProps) {
           </div>
         </details>
       ))}
+
+      {/* --- PAGINATION CONTROLS --- */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center space-x-2 pt-4">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="rounded-md bg-zinc-700 px-3 py-1 text-sm text-white hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Prev
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+            <button
+              key={page}
+              onClick={() => setCurrentPage(page)}
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors ${currentPage === page
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                }`}
+            >
+              {page}
+            </button>
+          ))}
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="rounded-md bg-zinc-700 px-3 py-1 text-sm text-white hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+        </div>
+      )}
     </div>
   );
 }
