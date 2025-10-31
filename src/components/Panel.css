@@ -122,8 +122,9 @@
   border-bottom: 1px solid #3f3f46;
   padding: 0.4rem 0.5rem;
   gap: 0.4rem;
-  overflow: hidden; /* ✅ hide any overflow */
-  flex-wrap: nowrap; /* ✅ force single row */
+  overflow: hidden; 
+  flex-wrap: nowrap; 
+  flex-shrink: 0; 
 }
 
 /* Tab buttons */
