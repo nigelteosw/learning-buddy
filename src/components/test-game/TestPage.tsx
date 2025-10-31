@@ -8,7 +8,7 @@ export function TestPage() {
   return (
     <div className="space-y-4">
       {!isGameInProgress && (
-        <h2 className="text-lg font-semibold text-white">Test Your Knowledge</h2>
+        <h2 className="text-lg font-semibold text-white text-center">Test Your Knowledge</h2>
       )}
       {!isGameInProgress && <TestStreak />}
       <TestGame onGameStateChange={setIsGameInProgress} />

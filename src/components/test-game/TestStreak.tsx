@@ -93,8 +93,11 @@ export function TestStreak() {
     <div className="space-y-3 rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Your Activity</h3>
-        <p className="text-lg font-bold text-orange-400">
-          {streak} day streak!
+        <p className="flex items-center gap-1.5 text-lg font-bold text-orange-400">
+          {streak > 0 && <span className="animate-pulse text-xl">🔥</span>}
+          <span>
+            {streak} Day{streak !== 1 ? 's' : ''} Streak!
+          </span>
         </p>
       </div>
       <ActivityGrid activity={activity} />
