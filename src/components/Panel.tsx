@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./Panel.css";
-import { marked } from "marked";
 
+import { TabContent } from "./TabContent";
 export type PanelTab = "explain" | "key" | "analogy" | "quiz";
 
 export type PanelProps = {
@@ -203,85 +203,59 @@ export const Panel: React.FC<PanelProps> = ({
   // what to show in the body
   // -----------------------------
   function renderActiveTabBody() {
-  switch (activeTab) {
-    case "explain": {
-      // Handle errors first
-      if (explainError) return explainError;
-      if (summaryError) return summaryError;
-
-      // We only show the loading placeholders if we are loading
-      // AND we haven't received any streamed text yet.
-      const showSummaryLoading = summaryLoading && !summaryText;
-      const showExplainLoading = explainLoading && !explainText;
-
-      return (
-        <>
-          <div id="lb-panel-content-heading">
-            {showSummaryLoading ? "…summarizing" : summaryText}
-          </div>
-          <div id="lb-panel-body">
-            {showExplainLoading ? "…thinking" : explainText}
-          </div>
-        </>
-      );
+    switch (activeTab) {
+      case "explain":
+        return (
+          <>
+            <TabContent
+              id="lb-panel-content-heading"
+              loading={summaryLoading}
+              error={summaryError}
+              text={summaryText}
+              loadingText="…summarizing"
+            />
+            <TabContent
+              loading={explainLoading}
+              error={explainError}
+              text={explainText}
+              loadingText="…thinking"
+            />
+          </>
+        );
+      case "key":
+        return (
+          <TabContent
+            loading={keyIdeasLoading}
+            error={keyIdeasError}
+            text={keyIdeasText}
+            loadingText="…finding key ideas"
+            isMarkdown
+          />
+        );
+      case "analogy":
+        return (
+          <TabContent
+            loading={analogyLoading}
+            error={analogyError}
+            text={analogyText}
+            loadingText="…coming up with an analogy"
+            isMarkdown
+          />
+        );
+      case "quiz":
+        return (
+          <TabContent
+            loading={quizLoading}
+            error={quizError}
+            text={quizText}
+            loadingText="…writing a quiz question"
+            isMarkdown
+          />
+        );
+      default:
+        return null;
     }
-
-    case "key": {
-      if (keyIdeasError) return keyIdeasError;
-
-      // Only block-render the placeholder if nothing has streamed in yet.
-      if (keyIdeasLoading && !keyIdeasText) {
-        return "…finding key ideas";
-      }
-
-      return (
-        <div
-          id="lb-panel-body"
-          dangerouslySetInnerHTML={{
-            __html: marked.parse(keyIdeasText || ""),
-          }}
-        />
-      );
-    }
-
-    case "analogy": {
-      if (analogyError) return analogyError;
-
-      if (analogyLoading && !analogyText) {
-        return "…coming up with an analogy";
-      }
-
-      return (
-        <div
-          id="lb-panel-body"
-          dangerouslySetInnerHTML={{
-            __html: marked.parse(analogyText || ""),
-          }}
-        />
-      );
-    }
-
-    case "quiz": {
-      if (quizError) return quizError;
-
-      if (quizLoading && !quizText) {
-        return "…writing a quiz question";
-      }
-
-      return (
-        <div
-          id="lb-panel-body"
-          dangerouslySetInnerHTML={{
-            __html: marked.parse(quizText || ""),
-          }}
-        />
-      );
-    }
-
-    default:
-      return null;
   }
-}
 
   // -----------------------------
   // Add Card (uses props now)
