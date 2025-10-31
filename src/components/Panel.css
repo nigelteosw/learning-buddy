@@ -12,7 +12,7 @@
   max-width: 90vw;       /* don't overflow viewport */
   max-height: 80vh;      /* slightly taller */
   min-width: 400px;      /* smallest allowed size */
-  min-height: 200px;
+  min-height: 400px;
 
   background-color: #18181b;
   color: white;
@@ -195,6 +195,12 @@
 #lb-panel-tab-body ul,
 #lb-panel-tab-body ol {
   padding-left: 1.5em; /* Keep list indentation */
+}
+
+/* Fix for markdown-rendered bold text appearing black */
+#lb-panel-tab-body strong,
+#lb-panel-tab-body b {
+  color: inherit;
 }
 
 /* Heading (short summary) */
