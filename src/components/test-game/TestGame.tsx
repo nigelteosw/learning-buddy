@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, db } from "@/lib/db";
 import { promptClient } from "@/lib/modelClients/promptClient";
 import { updateCardSRS, ReviewQuality } from "@/lib/srs";
@@ -73,11 +73,8 @@ export function TestGame() {
     setGameState(GameState.Playing);
   };
 
-  // --- Generate Quiz Options ---
-  // Memoize to prevent re-calculating options unnecessarily
-  const currentCard = useMemo(() => {
-    return sessionCards[currentCardIndex];
-  }, [sessionCards, currentCardIndex]);
+  // --- Get Current Card ---
+  const currentCard = sessionCards[currentCardIndex];
 
   useEffect(() => {
     if (gameState !== GameState.Playing || !currentCard) return;
