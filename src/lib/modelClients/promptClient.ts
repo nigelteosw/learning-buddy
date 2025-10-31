@@ -8,7 +8,7 @@ import {
   type PromptRole,
   type PromptSession,
 } from "@/types/promptTypes";
-import { checkModelAvailability } from "@/lib/utils/language";
+import { checkModelAvailability, getDefaultLanguage } from "@/lib/utils/language";
 import { Card } from "../db";
 
 // Define a type for the browser's LanguageModel API to avoid 'any'
@@ -55,10 +55,10 @@ export const defaultPromptOpts: GlobalPromptOpts = {
   systemPrompt: "You are a helpful on-device assistant.",
   history: [],
   expectedInputs: [
-    { type: "text", languages: ["en"] }, // system + user prompt languages
+    { type: "text", languages: [getDefaultLanguage()] }, // system + user prompt languages
   ],
   expectedOutputs: [
-    { type: "text", languages: ["en"] }, // model response language
+    { type: "text", languages: [getDefaultLanguage()] }, // model response language
   ],
 };
 
