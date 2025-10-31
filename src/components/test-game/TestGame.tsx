@@ -26,7 +26,11 @@ enum GameState {
   Finished,
 }
 
-export function TestGame() {
+type TestGameProps = {
+  onGameStateChange?: (inProgress: boolean) => void;
+};
+
+export function TestGame({ onGameStateChange }: TestGameProps) {
   const questionIdRef = useRef(0);
   const [gameState, setGameState] = useState<GameState>(GameState.NotStarted);
   // Store the 5 cards for this specific session
@@ -194,6 +198,14 @@ export function TestGame() {
       recordTestSession();
     }
   }, [gameState]);
+
+  // --- Effect to notify parent of game state changes ---
+  useEffect(() => {
+    if (onGameStateChange) {
+      const inProgress = gameState === GameState.Playing || gameState === GameState.Loading;
+      onGameStateChange(inProgress);
+    }
+  }, [gameState, onGameStateChange]);
 
   // --- Render Logic ---
 
