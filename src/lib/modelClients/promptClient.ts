@@ -11,20 +11,24 @@ import {
 import { checkModelAvailability } from "@/lib/utils/language";
 import { Card } from "../db";
 
-function hasLanguageModel(): boolean {
-  return typeof (self as any).LanguageModel !== "undefined";
-}
-
-// The Prompt API exposes LanguageModel.params() which returns model defaults:
-// { defaultTopK, maxTopK, defaultTemperature, maxTemperature }
-async function getModelParams() {
-  const res = await (self as any).LanguageModel.params();
-  return res as {
+// Define a type for the browser's LanguageModel API to avoid 'any'
+type LanguageModel = {
+  create: (options: Record<string, any>) => Promise<PromptSession>;
+  params: () => Promise<{
     defaultTopK: number;
     maxTopK: number;
     defaultTemperature: number;
     maxTemperature: number;
-  };
+  }>;
+  availability?: () => Promise<void>;
+};
+
+function hasLanguageModel(): boolean {
+  return typeof (self as any).LanguageModel?.create === "function";
+}
+
+async function getModelParams() {
+  return (self as any as { LanguageModel: LanguageModel }).LanguageModel.params();
 }
 
 // Normalize user input to what session.prompt() / session.promptStreaming() accept.
@@ -74,6 +78,60 @@ class PromptClient {
     this.opts = { ...this.opts, ...next };
   }
 
+  /**
+   * Normalizes temperature and topK based on model capabilities.
+   * @returns Sanitized tuning parameters or undefined if not supported.
+   */
+  private async _getTuningParams(
+    params: PromptCreateParams | undefined
+  ): Promise<{ temperature?: number; topK?: number }> {
+    const modelParams = await getModelParams();
+
+    const supportsTopK =
+      typeof modelParams?.maxTopK === "number" && modelParams.maxTopK > 0;
+
+    if (!supportsTopK) {
+      // Device does not support topK -> must omit BOTH tuning params
+      return { temperature: undefined, topK: undefined };
+    }
+
+    // Start with provided params, fallback to instance options, then model defaults
+    let temperature =
+      params?.temperature ??
+      this.opts.temperature ??
+      modelParams.defaultTemperature;
+    let topK = params?.topK ?? this.opts.topK ?? modelParams.defaultTopK;
+
+    // Sanitize topK into valid range [1, maxTopK]
+    if (typeof topK !== "number" || !Number.isFinite(topK)) {
+      topK = modelParams.defaultTopK;
+    }
+    topK = Math.round(topK);
+    if (topK < 1) {
+      topK = 1;
+    }
+    if (topK > modelParams.maxTopK) {
+      topK = modelParams.maxTopK;
+    }
+
+    // Sanitize temperature into [0, maxTemperature]
+    const maxT =
+      typeof modelParams.maxTemperature === "number"
+        ? modelParams.maxTemperature
+        : 2;
+    if (typeof temperature !== "number" || !Number.isFinite(temperature)) {
+      temperature = modelParams.defaultTemperature ?? 1;
+    }
+    if (temperature < 0) {
+      temperature = 0;
+    }
+    if (temperature > maxT) {
+      temperature = maxT;
+    }
+
+    return { temperature, topK };
+  }
+
   async initFromUserGesture(params?: PromptCreateParams) {
     // If we already have a session, just bail.
     // Reset availability status on re-init.
@@ -94,16 +152,7 @@ class PromptClient {
 
     // Merge global opts + one-time init overrides.
     // Arrays/fields like history or expectedInputs should prefer params if provided.
-    const merged: GlobalPromptOpts = {
-      ...this.opts,
-      ...params,
-      history: params?.history ?? this.opts.history,
-      expectedInputs: params?.expectedInputs ?? this.opts.expectedInputs,
-      expectedOutputs: params?.expectedOutputs ?? this.opts.expectedOutputs,
-      systemPrompt: params?.systemPrompt ?? this.opts.systemPrompt,
-      temperature: params?.temperature ?? this.opts.temperature,
-      topK: params?.topK ?? this.opts.topK,
-    };
+    const merged: GlobalPromptOpts = { ...this.opts, ...params };
 
     // Build initialPrompts for create():
     // We ALWAYS prepend the systemPrompt (if non-empty) as role:"system".
@@ -120,55 +169,15 @@ class PromptClient {
 
     // Best-effort availability() check per spec.
     try {
-      if ((self as any).LanguageModel.availability) {
-        await (self as any).LanguageModel.availability();
+      const lm = (self as any).LanguageModel as LanguageModel;
+      if (lm.availability) {
+        await lm.availability();
       }
     } catch (err) {
       console.warn("LanguageModel.availability() threw:", err);
     }
 
-    // ---- get defaults & normalize user-provided tuning -----------------
-    const modelParams = await getModelParams();
-    // console.debug("LanguageModel.params()", modelParams); // optional debug
-
-    // Start from merged
-    let { temperature, topK } = {
-      temperature: merged.temperature,
-      topK: merged.topK,
-    };
-
-    // If caller omitted either, try defaults
-    if (temperature === undefined || topK === undefined) {
-      temperature ??= modelParams?.defaultTemperature;
-      topK ??= modelParams?.defaultTopK;
-    }
-
-    // Some devices/browsers report no topK support (maxTopK = 0).
-    const supportsTopK =
-      typeof modelParams?.maxTopK === "number" && modelParams.maxTopK > 0;
-
-    if (supportsTopK) {
-      // sanitize topK into valid range [1, maxTopK]
-      if (typeof topK !== "number" || !Number.isFinite(topK)) {
-        topK = modelParams.defaultTopK;
-      }
-      topK = Math.round(topK as number);
-      if ((topK as number) < 1) topK = 1;
-      if ((topK as number) > modelParams.maxTopK) topK = modelParams.maxTopK;
-
-      // sanitize temperature into [0, maxTemperature]
-      const maxT =
-        typeof modelParams.maxTemperature === "number" ? modelParams.maxTemperature : 2;
-      if (typeof temperature !== "number" || !Number.isFinite(temperature)) {
-        temperature = modelParams.defaultTemperature ?? 1;
-      }
-      if (temperature < 0) temperature = 0;
-      if (temperature > maxT) temperature = maxT;
-    } else {
-      // Device does not support topK -> must omit BOTH tuning params
-      temperature = undefined;
-      topK = undefined;
-    }
+    const { temperature, topK } = await this._getTuningParams(params);
 
     // ---- build create() options ----------------------------------------
     const createOptions: Record<string, any> = {
@@ -187,7 +196,7 @@ class PromptClient {
     };
 
     // Only include tuning if valid & supported (spec: either both or neither)
-    if (supportsTopK && temperature !== undefined && topK !== undefined) {
+    if (temperature !== undefined && topK !== undefined) {
       createOptions.temperature = temperature;
       createOptions.topK = topK;
     }
@@ -197,7 +206,8 @@ class PromptClient {
     merged.topK = topK;
 
     // Actually create and store session.
-    this.creating = (self as any).LanguageModel.create(createOptions)
+    const lm = (self as any).LanguageModel as LanguageModel;
+    this.creating = lm.create(createOptions)
       .then((s: PromptSession) => {
         this.session = s;
         // Persist the merged config as our new baseline.
@@ -270,7 +280,7 @@ class PromptClient {
     });
   }
 
-  private async runStreamingPrompt(
+  private async _runStreamingPrompt(
     builder: () => string,
     signal?: AbortSignal
   ): Promise<AsyncIterable<string>> {
@@ -299,7 +309,7 @@ class PromptClient {
     text: string,
     { signal }: { signal?: AbortSignal } = {}
   ): Promise<AsyncIterable<string>> {
-    return this.runStreamingPrompt(
+    return this._runStreamingPrompt(
       () =>
         `Explain the following concept like I'm 5 years old:\n\n"${text}"`,
       signal
@@ -310,7 +320,7 @@ class PromptClient {
     text: string,
     { signal }: { signal?: AbortSignal } = {}
   ): Promise<AsyncIterable<string>> {
-    return this.runStreamingPrompt(
+    return this._runStreamingPrompt(
       () =>
         `Provide a simple analogy to help understand this concept:\n\n"${text}"`,
       signal
@@ -321,7 +331,7 @@ class PromptClient {
     text: string,
     { signal }: { signal?: AbortSignal } = {}
   ): Promise<AsyncIterable<string>> {
-    return this.runStreamingPrompt(
+    return this._runStreamingPrompt(
       () =>
         `List the 3 most important key takeaways from this text, as a bulleted list:\n\n"${text}"`,
       signal
@@ -335,7 +345,7 @@ class PromptClient {
   // pick a random target answer letter before passing to model
   const correctLetter = ["A", "B", "C", "D"][Math.floor(Math.random() * 4)];
 
-  return this.runStreamingPrompt(
+  return this._runStreamingPrompt(
     () => `
 You are a quiz generator. Based on the text below, create ONE simple multiple-choice question
 to test understanding. There must be exactly four options (A, B, C, D), and the correct answer
@@ -391,16 +401,16 @@ Correct Answer: ${correctLetter}
     await this.cloneSession({ signal, makeActive: true });
   }
 
-  private async runSinglePrompt(prompt: string, { signal }: { signal?: AbortSignal } = {}) {
-    const stream = await this.runStreamingPrompt(() => prompt, signal);
+  private async _runSinglePrompt(prompt: string, { signal }: { signal?: AbortSignal } = {}) {
+    const stream = await this._runStreamingPrompt(() => prompt, signal);
 
     let text = "";
     for await (const chunk of stream) text += chunk;
     return text.trim();
   }
 
-  private async generateTrueSentence(front: string, concept: string, signal?: AbortSignal) {
-      return this.runSinglePrompt(
+  private async _generateTrueSentence(front: string, concept: string, signal?: AbortSignal) {
+      return this._runSinglePrompt(
     `Write one natural, textbook-style sentence that correctly defines this idea.
     Use ONLY the explanation as truth. Do not name the concept. 12–26 words.
 
@@ -412,8 +422,8 @@ Correct Answer: ${correctLetter}
       );
     }
 
-  private async generateFalseSentence(front: string, concept: string, signal?: AbortSignal) {
-  return this.runSinglePrompt(
+  private async _generateFalseSentence(front: string, concept: string, signal?: AbortSignal) {
+  return this._runSinglePrompt(
   `Write one natural, textbook-style sentence that SEEMS correct but is WRONG by contradicting ONE key fact in the explanation.
   Use ONLY the explanation. Do not name the concept. 12–26 words. No meta text.
 
@@ -434,8 +444,8 @@ Correct Answer: ${correctLetter}
     const isFalse = wantsFalse;
 
     const promptFn = isFalse
-      ? () => this.generateFalseSentence(front, concept, signal)
-      : () => this.generateTrueSentence(front, concept, signal);
+      ? () => this._generateFalseSentence(front, concept, signal)
+      : () => this._generateTrueSentence(front, concept, signal);
 
     // This wraps the single-string-returning promise in a stream-like object
     // so the UI can consume it consistently.
@@ -466,8 +476,8 @@ Correct Answer: ${correctLetter}
 
     // The private methods are available via `this`
     const [trueText, falseText] = await Promise.all([
-      this.generateTrueSentence(card.front, card.concept, signal),
-      this.generateFalseSentence(card.front, card.concept, signal),
+      this._generateTrueSentence(card.front, card.concept, signal),
+      this._generateFalseSentence(card.front, card.concept, signal),
     ]);
 
     const pair = { trueText, falseText };
