@@ -1,8 +1,14 @@
 export default defineBackground(() => {
   console.log('[bg] background script loaded');
 
+  const sidepanelReady = new Set<number>();
+
   // --- Listener for messages from Content Script ---
   browser.runtime.onMessage.addListener(async (message, sender) => {
+    if (message.type === 'sidepanel-ready' && sender.tab?.id) {
+      sidepanelReady.add(sender.tab.id);
+      return; // done
+    }
     // Check if the message is from your content script asking to prefill
     console.log('[bg] Received message:', message);
     if (message.type === 'prefill-and-open-sidepanel' && sender.tab?.id) {
