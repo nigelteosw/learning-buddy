@@ -1,5 +1,6 @@
 import {
   type GlobalPromptOpts,
+  type ExpectedModality,
   type PromptAvailability,
   type PromptCreateParams,
   type PromptDownloadProgressEvent,
@@ -13,14 +14,22 @@ import { Card } from "../db";
 
 // Define a type for the browser's LanguageModel API to avoid 'any'
 type LanguageModel = {
-  create: (options: Record<string, any>) => Promise<PromptSession>;
+  create(options: {
+    initialPrompts?: PromptMessage[];
+    expectedInputs?: ExpectedModality[];
+    expectedOutputs?: ExpectedModality[];
+    temperature?: number;
+    topK?: number;
+    signal?: AbortSignal;
+    monitor?: (m: EventTarget) => void;
+  }): Promise<PromptSession>;
   params: () => Promise<{
     defaultTopK: number;
     maxTopK: number;
     defaultTemperature: number;
     maxTemperature: number;
   }>;
-  availability?: () => Promise<void>;
+  availability: () => Promise<PromptAvailability>;
 };
 
 function hasLanguageModel(): boolean {
@@ -28,7 +37,7 @@ function hasLanguageModel(): boolean {
 }
 
 async function getModelParams() {
-  return (self as any as { LanguageModel: LanguageModel }).LanguageModel.params();
+  return (self as any).LanguageModel.params();
 }
 
 // Normalize user input to what session.prompt() / session.promptStreaming() accept.
@@ -167,16 +176,6 @@ class PromptClient {
       initialPrompts.push(...merged.history);
     }
 
-    // Best-effort availability() check per spec.
-    try {
-      const lm = (self as any).LanguageModel as LanguageModel;
-      if (lm.availability) {
-        await lm.availability();
-      }
-    } catch (err) {
-      console.warn("LanguageModel.availability() threw:", err);
-    }
-
     const { temperature, topK } = await this._getTuningParams(params);
 
     // ---- build create() options ----------------------------------------
@@ -206,7 +205,7 @@ class PromptClient {
     merged.topK = topK;
 
     // Actually create and store session.
-    const lm = (self as any).LanguageModel as LanguageModel;
+    const lm = (self as any as { LanguageModel: LanguageModel }).LanguageModel;
     this.creating = lm.create(createOptions)
       .then((s: PromptSession) => {
         this.session = s;
@@ -535,13 +534,13 @@ Correct Answer: ${correctLetter}
       return this.availabilityStatus;
     }
 
-    const knownStates: readonly PromptAvailability[] = [
+    const knownStates: readonly (PromptAvailability | "no-api")[] = [
       "available",
       "downloadable",
       "downloading",
       "unavailable",
       "unknown",
-      "no-api", // This is a custom state, but we can include it.
+      "no-api",
     ];
     // The base check already handles the 'no-api' case if LanguageModel is missing.
     const status = await checkModelAvailability("LanguageModel", knownStates);
