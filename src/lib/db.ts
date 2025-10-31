@@ -13,20 +13,32 @@ export interface Card {
   tags?: string[];
 }
 
+// New interface for tracking test sessions
+export interface TestSession {
+  id?: number;
+  completedAt: Date;
+  score: number;
+  totalQuestions: number;
+  quizSize: number | "all";
+}
+
 // 2. Create your database "class"
 export class TutorDexie extends Dexie {
   // 'cards' is the name of your data table
   cards!: Table<Card>; 
+  testSessions!: Table<TestSession>;
 
   constructor() {
     super('learning-buddy-db'); 
     // IMPORTANT: Increment the version number when changing the schema.
-    // Here we go from 1 to 2.
-    this.version(3).stores({
+    // Here we go from 3 to 4.
+    this.version(4).stores({
       // The '*' before 'tags' creates a multi-entry index.
       // This allows Dexie to efficiently query for individual tags within the array.
       // Added 'createdAt' to the index for efficient sorting.
-      cards: '++id, concept, dueDate, createdAt, *tags'
+      cards: '++id, concept, dueDate, createdAt, *tags',
+      // New table for test sessions. Indexing completedAt for future queries.
+      testSessions: '++id, completedAt'
     });
   }
 }

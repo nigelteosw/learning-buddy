@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Card, db } from "@/lib/db";
+import { Card, db, TestSession } from "@/lib/db";
 import { promptClient } from "@/lib/modelClients/promptClient";
 import { updateCardSRS, ReviewQuality } from "@/lib/srs";
 
@@ -33,6 +33,7 @@ export function TestGame() {
   const [sessionCards, setSessionCards] = useState<Card[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [sessionScore, setSessionScore] = useState(0);
+  const [quizSize, setQuizSize] = useState<number | "all">(5);
   const [questionLoading, setQuestionLoading] = useState(false);
 
   // New state for the quiz interaction
@@ -43,7 +44,7 @@ export function TestGame() {
   const [showNextButton, setShowNextButton] = useState(false); // Control when "Next" appears
 
   // --- Start Session Logic ---
-  const handleStartSession = async () => {
+  const handleStartSession = async (size: number | "all") => {
     try {
       await promptClient.initFromUserGesture(); // <-- do this on a click
     } catch (e) {
@@ -62,7 +63,8 @@ export function TestGame() {
 
     // Shuffle and pick 5 cards for the session
     const shuffled = shuffleArray([...loadedCards]);
-    const sessionSubset = shuffled.slice(0, 5); // Limit to 5 questions
+    const sessionSubset =
+      size === "all" ? shuffled : shuffled.slice(0, size);
 
     setSessionCards(sessionSubset);
     setCurrentCardIndex(0);
@@ -135,13 +137,18 @@ export function TestGame() {
     if (correct) setSessionScore((prev) => prev + 1);
   };
 
-  // --- Handle Moving to Next Question ---
-  const handleNextQuestion = async () => {
+  // --- NEW: Function to record the answer for the current card ---
+  const recordCurrentCardAnswer = async () => {
     if (!currentCard) return;
-
     // Determine SRS quality based on correctness
     const quality: ReviewQuality = isAnswerCorrect ? 4 : 0; // Correct = Good, Incorrect = Again
     await updateCardSRS(currentCard, quality);
+  };
+
+  // --- Handle Moving to Next Question ---
+  const handleNextQuestion = async () => {
+    // First, record the result of the card we just answered.
+    await recordCurrentCardAnswer();
 
     // Move to next card or finish
     if (currentCardIndex < sessionCards.length - 1) {
@@ -151,8 +158,23 @@ export function TestGame() {
       setIsAnswerCorrect(null);
       setShowNextButton(false);
     } else {
+      // This was the last card. The answer was recorded by the awaited
+      // `recordCurrentCardAnswer()` call at the start of this function.
+      // Now we can safely finish the game.
       setGameState(GameState.Finished);
     }
+  };
+
+  // --- NEW: Function to record the completed test session ---
+  const recordTestSession = async () => {
+    const sessionResult: TestSession = {
+      completedAt: new Date(),
+      score: sessionScore,
+      totalQuestions: sessionCards.length,
+      quizSize: quizSize,
+    };
+    await db.testSessions.add(sessionResult);
+    console.log("Test session recorded:", sessionResult);
   };
 
   // --- Reset to Start Screen ---
@@ -165,6 +187,14 @@ export function TestGame() {
     }
   };
 
+  // --- Effect to run when game finishes ---
+  useEffect(() => {
+    if (gameState === GameState.Finished) {
+      // Record the session when the game is finished.
+      recordTestSession();
+    }
+  }, [gameState]);
+
   // --- Render Logic ---
 
   if (gameState === GameState.Loading) {
@@ -173,13 +203,31 @@ export function TestGame() {
 
   if (gameState === GameState.NotStarted) {
     return (
-      <div className="flex flex-col items-center justify-center space-y-4 pt-10">
+      <div className="flex flex-col items-center justify-center space-y-6 pt-10">
         <h2 className="text-xl font-semibold text-white">Ready for a Quiz?</h2>
+
+        {/* Quiz Size Selector */}
+        <div className="flex items-center space-x-2 rounded-lg bg-zinc-800 p-1">
+          {([5, 10, "all"] as const).map((size) => (
+            <button
+              key={size}
+              onClick={() => setQuizSize(size)}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                quizSize === size
+                  ? "bg-blue-600 text-white"
+                  : "text-zinc-300 hover:bg-zinc-700"
+              }`}
+            >
+              {size === "all" ? "All Cards" : `${size} Cards`}
+            </button>
+          ))}
+        </div>
+
         <button
-          onClick={handleStartSession}
+          onClick={() => handleStartSession(quizSize)}
           className="rounded-lg bg-blue-600 px-6 py-3 text-lg font-semibold text-white transition-colors hover:bg-blue-500"
         >
-          Start Quiz (5 Cards)
+          Start Quiz
         </button>
       </div>
     );

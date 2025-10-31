@@ -3,7 +3,7 @@ import { db, Card } from '@/lib/db'; // 1. Import Card type
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AddCardForm } from '@/components/AddCardForm';
 import { ReviewList } from '@/components/review-list/ReviewList';
-import { TestGame } from '@/components/test-game/TestGame'; // Keep this
+import { TestPage } from '@/components/test-game/TestPage';
 import { ImportExport } from '@/components/ImportExport';
 
 
@@ -123,7 +123,7 @@ function App() {
       />)}
 
       {/* --- Test GAME TAB --- */}
-      {activeTab === 'test' && (<TestGame />)}
+      {activeTab === 'test' && (<TestPage />)}
 
       {/* --- NEW: ALL CARDS TAB --- */}
       {activeTab === 'browseCards' && (
