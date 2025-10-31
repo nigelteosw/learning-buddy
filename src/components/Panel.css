@@ -236,20 +236,15 @@
   gap: 0.5rem;
 }
 
-#lb-panel-source {
-  font-size: 11px;
-  color: #a1a1aa;
-  line-height: 1.4;
-}
-
-.lb-source-frag {
-  color: #d4d4d8;
-  font-style: italic;
+/* 🆕 New container for footer buttons */
+#lb-panel-footer-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 /* Footer button */
-#lb-panel-footer button {
-  align-self: flex-start;
+/* 🆕 Target buttons inside the new container */
+#lb-panel-footer-actions button {
   padding: 0.25rem 0.625rem;
   font-size: 12px;
   font-weight: 500;
@@ -261,9 +256,21 @@
   transition: background-color 0.15s ease-in-out, filter 0.15s ease-in-out;
 }
 
-#lb-panel-footer button:hover {
+/* 🆕 Target buttons inside the new container */
+#lb-panel-footer-actions button:hover {
   background-color: #1d4ed8; /* blue-700 */
   filter: brightness(1.05);
+}
+
+/* 🆕 Style the second button (Copy Text) differently */
+#lb-panel-footer-actions button:nth-child(2) {
+  background-color: #3f3f46; /* zinc-700 */
+  border-color: #52525b; /* zinc-600 */
+}
+
+#lb-panel-footer-actions button:nth-child(2):hover {
+  background-color: #52525b; /* zinc-600 */
+  border-color: #71717a; /* zinc-500 */
 }
 
 /* =========================

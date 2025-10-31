@@ -25,8 +25,15 @@ function App() {
   // Message listener (no changes needed here)
   useEffect(() => {
     const messageListener = (message: any) => {
-      // ... (handles 'explain-text', 'show-test', 'prefill-data')
-      if (message.type === "explain-text" && message.text) {
+      // Handle opening the 'Add Card' tab from the popup
+      if (message.type === "show-add-card") {
+        console.log("App received show-add-card");
+        setCardToEdit(null);
+        setInitialPrefillData(null);
+        setActiveTab("addCard");
+      }
+      // Handle 'Explain' from context menu, pre-filling the front text
+      else if (message.type === "explain-text" && message.text) {
         console.log("App received explain-text:", message.text);
         setOriginalHighlight(message.text);
         setFrontText(message.text);
@@ -34,23 +41,18 @@ function App() {
         setInitialPrefillData(null);
         setActiveTab("addCard");
       }
-      if (message.type === "show-test") {
+      // Handle opening the 'Test' tab from the popup
+      else if (message.type === "show-test") {
         console.log("App received show-test");
         setActiveTab("test");
       }
-      if (message.type === "prefill-and-open-sidepanel" && message.data) {
+      // Handle creating a card from the floating panel
+      else if (
+        (message.type === "prefill-and-open-sidepanel" ||
+          message.type === "prefill-data") &&
+        message.data
+      ) {
         console.log("App received prefill-and-open-sidepanel:", message.data);
-        setFrontText(message.data.front);
-        setOriginalHighlight(message.data.front);
-        setCardToEdit(null);
-        setInitialPrefillData({
-          heading: message.data.front,
-          back: message.data.back,
-        });
-        setActiveTab("addCard");
-      }
-      if (message.type === "prefill-data" && message.data) {
-        console.log("App received prefill-data:", message.data);
         setFrontText(message.data.front);
         setOriginalHighlight(message.data.front);
         setCardToEdit(null);
@@ -59,6 +61,16 @@ function App() {
           back: message.data.back,
         });
         setActiveTab("addCard");
+      }
+      // Handle opening the 'Import/Export' tab from the popup
+      else if (message.type === "show-import-export") {
+        console.log("App received show-import-export");
+        setActiveTab("importExport");
+      }
+      // Handle opening the 'Browse Cards' tab from the popup
+      else if (message.type === "show-browse-cards") {
+        console.log("App received show-browse-cards");
+        setActiveTab("browseCards");
       }
     };
     browser.runtime.onMessage.addListener(messageListener);

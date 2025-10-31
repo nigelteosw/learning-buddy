@@ -198,6 +198,7 @@ export const Panel: React.FC<PanelProps> = ({
   // TAB STATE (local UI only)
   // -----------------------------
   const [activeTab, setActiveTab] = useState<PanelTab>("explain");
+  const [isCopied, setIsCopied] = useState(false);
 
   // -----------------------------
   // what to show in the body
@@ -282,6 +283,41 @@ export const Panel: React.FC<PanelProps> = ({
     onAdd(front, back);
   }
 
+  // -----------------------------
+  // Copy to Clipboard
+  // -----------------------------
+  function handleCopyClick() {
+    let textToCopy = "";
+
+    switch (activeTab) {
+      case "explain":
+        // For explain, combine summary and the main explanation.
+        textToCopy = `${summaryText}\n\n${explainText}`;
+        break;
+      case "key":
+        textToCopy = keyIdeasText;
+        break;
+      case "analogy":
+        textToCopy = analogyText;
+        break;
+      case "quiz":
+        textToCopy = quizText;
+        break;
+    }
+
+    // The `marked` library is used for some tabs, which adds HTML.
+    // To get plain text, we can parse it and then extract the text content.
+    const isMarkdown = ["key", "analogy", "quiz"].includes(activeTab);
+    if (isMarkdown) {
+      const div = document.createElement("div");
+      div.innerHTML = textToCopy; // marked() is not needed, it's already markdown text
+      textToCopy = div.textContent || div.innerText || "";
+    }
+
+    navigator.clipboard.writeText(textToCopy.trim());
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
+  }
   // -----------------------------
   // JSX
   // -----------------------------
@@ -368,16 +404,12 @@ export const Panel: React.FC<PanelProps> = ({
       <div id="lb-panel-tab-body">{renderActiveTabBody()}</div>
 
       {/* FOOTER */}
-      <div id="lb-panel-footer"><button onClick={handleAddClick}>Make Card</button></div>
-      
-      {/* {sourceText ? (
-        <div id="lb-panel-footer">
-          <div id="lb-panel-source">
-            Based on: <span className="lb-source-frag">{sourceText}</span>
-          </div>
+      <div id="lb-panel-footer">
+        <div id="lb-panel-footer-actions">
           <button onClick={handleAddClick}>Make Card</button>
+          <button onClick={handleCopyClick}>{isCopied ? "Copied!" : "Copy Text"}</button>
         </div>
-      ) : null} */}
+      </div>
     </div>
   );
 };

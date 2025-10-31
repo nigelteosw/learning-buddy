@@ -29,40 +29,11 @@ function PopupApp() {
     await isExtensionEnabled.setValue(newState);
   };
 
-  const handleOpenPanel = async () => {
-    try {
-      const [activeTab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      if (activeTab?.id) {
-        await browser.sidePanel.open({ tabId: activeTab.id });
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        console.log("Popup sending show-add-card message...");
-        await browser.runtime.sendMessage({ type: "show-add-card" });
-      } else {
-        console.warn("Could not find active tab to open side panel for.");
-
-        const currentWindow = await browser.windows.getCurrent();
-        if (currentWindow.id) {
-          await browser.sidePanel.open({ windowId: currentWindow.id });
-          await new Promise((resolve) => setTimeout(resolve, 100)); // Add delay here too
-          await browser.runtime.sendMessage({ type: "show-add-card" });
-        }
-      }
-    } catch (e) {
-      console.error("Error opening side panel:", e);
-    }
-    window.close();
-  };
-
   /**
-   * Opens the side panel for the current active tab and sends a message
-   * instructing it to switch to the 'review' view.
+   * A reusable helper to open the side panel and send a message.
+   * @param message The message to send to the side panel's App component.
    */
-  const handleOpenTest = async () => {
+  const openSidePanelAndSendMessage = async (message: { type: string }) => {
     try {
       const [activeTab] = await browser.tabs.query({
         active: true,
@@ -70,44 +41,33 @@ function PopupApp() {
       });
 
       if (activeTab?.id) {
-        // --- Option 1: Open by Tab ID ---
         await browser.sidePanel.open({ tabId: activeTab.id });
       } else {
-        // --- Option 2: Fallback to Window ID ---
-        console.warn(
-          "handleOpenReview: Could not find active tab. Falling back to current window."
-        );
-        try {
-          const currentWindow = await browser.windows.getCurrent();
-          if (currentWindow.id !== undefined) {
-            // Check if ID is defined
-            // Explicitly use windowId, which is now guaranteed to be a number
-            await browser.sidePanel.open({ windowId: currentWindow.id });
-          } else {
-            // If both fail, log an error and exit
-            console.error("handleOpenReview: Failed to get current window ID.");
-            window.close();
-            return;
-          }
-        } catch (windowError) {
-          console.error(
-            "handleOpenReview: Failed to get current window:",
-            windowError
-          );
-          window.close();
+        console.warn("Could not find active tab, falling back to window.");
+        const currentWindow = await browser.windows.getCurrent();
+        if (currentWindow.id !== undefined) {
+          await browser.sidePanel.open({ windowId: currentWindow.id });
+        } else {
+          console.error("Failed to get a valid tab or window ID to open the side panel.");
           return;
         }
       }
 
-      // --- Send Message (only if panel was opened successfully) ---
+      // Wait a moment for the panel to be ready before sending the message
       await new Promise((resolve) => setTimeout(resolve, 150));
-      await browser.runtime.sendMessage({ type: "show-test" });
+      await browser.runtime.sendMessage(message);
+
     } catch (error) {
-      console.error("handleOpenReview: Unexpected error:", error);
+      console.error("Error opening side panel and sending message:", error);
     } finally {
       window.close();
     }
   };
+
+  const handleOpenPanel = () => openSidePanelAndSendMessage({ type: "show-add-card" });
+  const handleOpenList = () => openSidePanelAndSendMessage({ type: "show-browse-cards" });
+  const handleOpenTest = () => openSidePanelAndSendMessage({ type: "show-test" });
+  const handleOpenImportExport = () => openSidePanelAndSendMessage({ type: "show-import-export" });
 
   return (
     <main className="w-48 space-y-3 bg-zinc-900 p-3 font-sans text-white">
@@ -136,7 +96,6 @@ function PopupApp() {
           <p className="text-center text-sm text-zinc-400">
             {cardCount} cards saved
           </p>
-          <hr className="border-zinc-700" />
           <div className="flex flex-col space-y-2">
             <button
               onClick={handleOpenPanel}
@@ -150,6 +109,18 @@ function PopupApp() {
             >
               Test Me!
             </button>
+            <button
+              onClick={handleOpenList}
+              className="rounded-md bg-zinc-800 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            >
+              Review Cards
+            </button>
+            <button
+              onClick={handleOpenImportExport}
+              className="rounded-md bg-zinc-800 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            >
+              Import/Export
+            </button>
           </div>
         </>
       ) : (
@@ -157,6 +128,11 @@ function PopupApp() {
           Extension is currently disabled.
         </p>
       )}
+
+      <hr className="border-zinc-700" />
+      <p className="text-center text-xs text-zinc-500">
+        💾 Saved locally
+      </p>
     </main>
   );
 }
