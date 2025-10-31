@@ -5,12 +5,13 @@ import { AddCardForm } from '@/components/AddCardForm';
 import { ReviewList } from '@/components/review-list/ReviewList';
 import { TestPage } from '@/components/test-game/TestPage';
 import { ImportExport } from '@/components/ImportExport';
+import { HelpAndCredits } from '@/components/HelpAndCredits';
 
 
 function App() {
   const [frontText, setFrontText] = useState('');
   const [originalHighlight, setOriginalHighlight] = useState('');
-  const [activeTab, setActiveTab] = useState<'addCard' | 'test' | 'browseCards' | 'importExport'>('addCard');
+  const [activeTab, setActiveTab] = useState<'addCard' | 'test' | 'browseCards' | 'importExport' | 'help'>('addCard');
   const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
   const [initialPrefillData, setInitialPrefillData] = useState<{ heading: string; back: string } | null>(null);
 
@@ -103,13 +104,23 @@ function App() {
           Cards ({cardCount})
         </button>
         <button
-          className={`ml-auto px-4 py-2 text-sm ${activeTab === 'importExport'
+          className={`px-4 py-2 text-sm ${activeTab === 'importExport'
               ? 'border-b-2 border-blue-500 text-white'
               : 'text-zinc-400'
             }`}
           onClick={() => setActiveTab('importExport')}
         >
           Import/Export
+        </button>
+        {/* Help Button */}
+        <button
+          className={`ml-auto px-4 py-2 text-sm ${activeTab === 'help'
+              ? 'border-b-2 border-blue-500 text-white'
+              : 'text-zinc-400'
+            }`}
+          onClick={() => setActiveTab('help')}
+        >
+          Help
         </button>
       </div>
 
@@ -134,6 +145,11 @@ function App() {
       {/* 6. NEW: IMPORT/EXPORT TAB CONTENT --- */}
       {activeTab === 'importExport' && (
         <ImportExport />
+      )}
+
+      {/* --- NEW: HELP TAB --- */}
+      {activeTab === 'help' && (
+        <HelpAndCredits />
       )}
     </main>
   );

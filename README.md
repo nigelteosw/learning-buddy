@@ -16,7 +16,7 @@ This extension leverages **Gemini Nano**, Google's most efficient model built to
 *   **Privacy-First:** Your highlighted text and learning data are processed locally. Nothing is sent to a server.
 *   **Works Offline:** Once the model is downloaded by your browser, the core AI features are available without an internet connection.
 
-> **Note:** The availability and performance of on-device AI features depend on your browser version (e.g., Chrome 127+) and underlying hardware. Your mileage may vary.
+> **Note:** The availability and performance of on-device AI features depend on your browser version (e.g., Chrome 140+) and underlying hardware. Your mileage may vary.
 
 ## Features
 
