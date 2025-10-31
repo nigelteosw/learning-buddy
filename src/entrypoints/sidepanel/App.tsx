@@ -33,14 +33,14 @@ function App() {
         console.log('App received show-test');
         setActiveTab('test');
       }
-      if (message.type === 'prefill-data' && message.data) {
-        console.log('App received prefill-data:', message.data);
+      if (message.type === 'prefill-and-open-sidepanel' && message.data) {
+        console.log('App received prefill-and-open-sidepanel:', message.data);
         setFrontText(message.data.front);
         setOriginalHighlight(message.data.front);
         setCardToEdit(null);
         setInitialPrefillData({
-          heading: message.data.heading,
-          back: message.data.back
+          heading: message.data.front,
+          back: message.data.back,
         });
         setActiveTab('addCard');
       }

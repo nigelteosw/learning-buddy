@@ -80,10 +80,11 @@ function renderPanel() {
 
   const handleAdd = (front: string, back: string) => {
     browser.runtime.sendMessage({
-      type: "prefill-and-open-sidepanel",
-      front: data.sourceText,
-      heading: front,
-      back: back,
+      type: 'prefill-and-open-sidepanel',
+      data: {
+        front: front, // This is the summary from the panel
+        back: back,
+      },
     });
   };
 
