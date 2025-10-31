@@ -1,5 +1,5 @@
 import {
-  type GlobalPromptOpts,
+  GlobalPromptOpts,
   type ExpectedModality,
   type PromptAvailability,
   type PromptCreateParams,
@@ -9,8 +9,9 @@ import {
   type PromptRole,
   type PromptSession,
 } from "@/types/promptTypes";
-import { checkModelAvailability, getDefaultLanguage } from "@/lib/utils/language";
+import { getDefaultLanguage } from "@/lib/utils/language";
 import { Card } from "../db";
+import { BaseModelClient } from './baseClient';
 
 // Define a type for the browser's LanguageModel API to avoid 'any'
 type LanguageModel = {
@@ -71,20 +72,19 @@ export const defaultPromptOpts: GlobalPromptOpts = {
   ],
 };
 
-class PromptClient {
-  private session: PromptSession | null = null;
-  private creating?: Promise<PromptSession>;
-  private opts: GlobalPromptOpts = { ...defaultPromptOpts };
-  private availabilityStatus: PromptAvailability | null = null;
+const PROMPT_KNOWN_STATES: readonly PromptAvailability[] = [
+  "available",
+  "downloadable",
+  "downloading",
+  "unavailable",
+  "unknown",
+];
+
+class PromptClient extends BaseModelClient<PromptSession, GlobalPromptOpts, PromptAvailability, PromptCreateParams> {
   private pairCache = new Map<number, { trueText: string; falseText: string }>();
 
-  /**
-   * Update the global defaults. Similar to writerClient.setOpts().
-   * This DOES NOT recreate the session automatically. It affects
-   * the next initFromUserGesture() if you haven't initialized yet.
-   */
-  setOpts(next: Partial<GlobalPromptOpts>) {
-    this.opts = { ...this.opts, ...next };
+  constructor() {
+    super(defaultPromptOpts, 'LanguageModel', PROMPT_KNOWN_STATES);
   }
 
   /**
@@ -143,7 +143,7 @@ class PromptClient {
 
   async initFromUserGesture(params?: PromptCreateParams) {
     // If we already have a session, just bail.
-    // Reset availability status on re-init.
+    // Reset availability status on re-init, handled by the gesture.
     this.availabilityStatus = null;
 
     if (this.session) return;
@@ -527,41 +527,9 @@ Correct Answer: ${correctLetter}
     return { inputUsage, inputQuota };
   }
 
-  async availability(
-    force: boolean = false
-  ): Promise<PromptAvailability> {
-    if (this.availabilityStatus && !force) {
-      return this.availabilityStatus;
-    }
-
-    const knownStates: readonly (PromptAvailability | "no-api")[] = [
-      "available",
-      "downloadable",
-      "downloading",
-      "unavailable",
-      "unknown",
-      "no-api",
-    ];
-    // The base check already handles the 'no-api' case if LanguageModel is missing.
-    const status = await checkModelAvailability("LanguageModel", knownStates);
-    this.availabilityStatus = status;
-    return status;
-  }
-
-  /**
-   * Destroy the current session and clear all refs.
-   * After dispose(), you'll need to call initFromUserGesture() again
-   * (from a user gesture) to recreate.
-   */
-  dispose() {
-    try {
-      this.session?.destroy?.();
-    } catch (err) {
-      console.warn("Error during prompt session disposal:", err);
-    }
-    this.session = null;
-    this.creating = undefined;
-    this.availabilityStatus = null;
+  dispose(): void {
+    super.dispose();
+    this.pairCache.clear();
   }
 }
 

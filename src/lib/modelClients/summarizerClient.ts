@@ -1,12 +1,13 @@
 import {
-  type GlobalSummarizerOpts,
+  GlobalSummarizerOpts,
   type CreateParams,
   type SummarizerSession,
   type SummarizerCreateOptions,
   type SummarizerDownloadProgressEvent,
   type SummarizerAvailability, // Import the type alias
 } from "@/types/summarizerTypes";
-import { checkModelAvailability, getDefaultLanguage } from "@/lib/utils/language";
+import { getDefaultLanguage } from "@/lib/utils/language";
+import { BaseModelClient } from "./baseClient";
 
 export const defaultSummarizerOpts: GlobalSummarizerOpts = {
   sharedContext:
@@ -17,39 +18,19 @@ export const defaultSummarizerOpts: GlobalSummarizerOpts = {
   outputLanguage: getDefaultLanguage(),
 };
 
+const SUMMARIZER_KNOWN_STATES: readonly SummarizerAvailability[] = [
+  "available",
+  "downloadable",
+  "downloading",
+  "unavailable",
+  "unknown",
+];
 
-class SummarizerClient {
-  private session: SummarizerSession | null = null;
-  private creating?: Promise<SummarizerSession>;
-  private opts: GlobalSummarizerOpts = defaultSummarizerOpts;
-  private availabilityStatus:
-    | SummarizerAvailability
-    | "no-api"
-    | "unknown"
-    | null = null;
-
-  setOpts(next: Partial<GlobalSummarizerOpts>) {
-    this.opts = { ...this.opts, ...next };
+class SummarizerClient extends BaseModelClient<SummarizerSession, GlobalSummarizerOpts, SummarizerAvailability, CreateParams> {
+  constructor() {
+    super(defaultSummarizerOpts, 'Summarizer', SUMMARIZER_KNOWN_STATES);
   }
-
-  async availability(
-    force: boolean = false
-  ): Promise<SummarizerAvailability | "no-api" | "unknown"> {
-    if (this.availabilityStatus && !force) {
-      return this.availabilityStatus;
-    }
-    const knownStates: readonly SummarizerAvailability[] = [
-      "available",
-      "downloadable",
-      "downloading",
-      "unavailable",
-      "unknown",
-    ];
-    const status = await checkModelAvailability("Summarizer", knownStates);
-    this.availabilityStatus = status;
-    return status;
-  }
-
+  
   /** Must be called from a user gesture (click) in content/popup */
   async initFromUserGesture(params?: CreateParams) {
     // Reset availability status on re-init.
@@ -156,17 +137,6 @@ class SummarizerClient {
       signal,
       context,
     });
-  }
-
-  dispose() {
-    try {
-      this.session?.destroy?.();
-    } catch (e) {
-      console.warn("Error during summarizer session disposal:", e);
-    }
-    this.session = null;
-    this.creating = undefined;
-    this.availabilityStatus = null;
   }
 }
 

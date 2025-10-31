@@ -1,14 +1,15 @@
 // src/lib/writerClient.ts
 import {
-  type GlobalWriterOpts,
+  GlobalWriterOpts,
   type CreateParams,
   type WriterSession,
   type WriterCreateOptions,
   type WriterDownloadProgressEvent,
   type WriterAvailability,
   SUPPORTED_LANGUAGES, // Import constants/types as needed
-} from "@/types/writerTypes"; 
-import { checkModelAvailability, getDefaultLanguage } from '@/lib/utils/language';
+} from "@/types/writerTypes";
+import { getDefaultLanguage } from '@/lib/utils/language';
+import { BaseModelClient } from './baseClient';
 
 export const defaultWriterOpts: GlobalWriterOpts = {
   sharedContext: "Simplify this concept for me.",
@@ -18,18 +19,18 @@ export const defaultWriterOpts: GlobalWriterOpts = {
   outputLanguage: getDefaultLanguage(),
 };
 
-class WriterClient {
-  // --- 4. Use Specific Types instead of "any" ---
-  private session: WriterSession | null = null;
-  private creating?: Promise<WriterSession>; // Use real type
-  private opts: GlobalWriterOpts = defaultWriterOpts;
-  private availabilityStatus: WriterAvailability | "no-api" | "unknown" | null =
-    null;
+const WRITER_KNOWN_STATES: readonly WriterAvailability[] = [
+  "available",
+  "downloadable",
+  "downloading",
+  "unavailable",
+  "unknown",
+];
 
-  setOpts(next: Partial<GlobalWriterOpts>) {
-    this.opts = { ...this.opts, ...next };
+class WriterClient extends BaseModelClient<WriterSession, GlobalWriterOpts, WriterAvailability, CreateParams> {
+  constructor() {
+    super(defaultWriterOpts, 'Writer', WRITER_KNOWN_STATES);
   }
-
   /** Must be called from a user gesture (click) in content/popup */
   async initFromUserGesture(params?: CreateParams) {
     // Reset availability status on re-init.
@@ -121,39 +122,6 @@ class WriterClient {
       signal,
       context,
     });
-  }
-
-  /**
-   * Checks availability of the writer.
-   */
-  async availability(
-    force: boolean = false
-  ): Promise<WriterAvailability | "no-api" | "unknown"> {
-    if (this.availabilityStatus && !force) {
-      return this.availabilityStatus;
-    }
-
-    const knownStates: readonly WriterAvailability[] = [
-      "available",
-      "downloadable",
-      "downloading",
-      "unavailable",
-      "unknown",
-    ];
-    const status = await checkModelAvailability("Writer", knownStates);
-    this.availabilityStatus = status;
-    return status;
-  }
-
-  dispose() {
-    try {
-      this.session?.destroy?.();
-    } catch (e) {
-      console.warn("Error during writer session disposal:", e);
-    }
-    this.session = null;
-    this.creating = undefined;
-    this.availabilityStatus = null;
   }
 }
 

@@ -1,33 +1,40 @@
+/**
+ * Defines message types for communication between different parts of the extension.
+ * Using a constant object helps prevent typos and provides a single source of truth.
+ */
+const MessageTypes = {
+  SIDE_PANEL_READY: 'sidepanel-ready',
+  PREFILL_AND_OPEN_SIDEPANEL: 'prefill-and-open-sidepanel',
+  PREFILL_DATA: 'prefill-data',
+  EXPLAIN_TEXT_FROM_CONTEXT_MENU: 'EXPLAIN_TEXT_FROM_CONTEXT_MENU',
+} as const;
+
 export default defineBackground(() => {
   console.log('[bg] background script loaded');
 
-  const sidepanelReady = new Set<number>();
-
-  // --- Listener for messages from Content Script ---
+  /**
+   * Listens for messages from content scripts and the side panel.
+   */
   browser.runtime.onMessage.addListener(async (message, sender) => {
-    if (message.type === 'sidepanel-ready' && sender.tab?.id) {
-      sidepanelReady.add(sender.tab.id);
-      return; // done
-    }
-    // Check if the message is from your content script asking to prefill
-    console.log('[bg] Received message:', message);
-    if (message.type === 'prefill-and-open-sidepanel' && sender.tab?.id) {
+    // This message is sent from the content script when a user wants to create a new card.
+    if (message.type === MessageTypes.PREFILL_AND_OPEN_SIDEPANEL && sender.tab?.id) {
+      console.log('[bg] Received prefill request:', message);
       try {
         // 1. Open the side panel for the tab that sent the message
         await browser.sidePanel.open({ tabId: sender.tab.id });
 
         // 2. Forward the data to the side panel
-        // (Use tabs.sendMessage to target the specific side panel instance)
+        // We use runtime.sendMessage, which will be received by the side panel's own listener.
         console.log('[bg] Side panel opened, attempting to send prefill-data via runtime...');
-        await browser.runtime.sendMessage({ // Use runtime.sendMessage
-          type: 'prefill-data',
+        await browser.runtime.sendMessage({
+          type: MessageTypes.PREFILL_DATA,
           data: {
-            front: message.front,
-            heading: message.heading,
-            back: message.back,
+            front: message.data.front,
+            heading: message.data.heading,
+            back: message.data.back,
           },
         });
-        console.log('[bg] Prefill data sent to side panel for tab:', sender.tab.id);
+        console.log('[bg] Prefill data sent to runtime for tab:', sender.tab.id);
       } catch (e) {
         console.error("[bg] Error handling prefill message:", e);
       }
@@ -36,7 +43,9 @@ export default defineBackground(() => {
     }
   });
 
-  // --- Your existing context menu logic ---
+  /**
+   * Creates the context menu item upon installation.
+   */
   chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
       id: 'explain-selection',
@@ -45,18 +54,20 @@ export default defineBackground(() => {
     });
   });
 
-  // When the context menu item is clicked
+  /**
+   * Handles clicks on the context menu item.
+   */
   chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === 'explain-selection' && tab?.id && info.selectionText) {
-      // Send message *to the content script* in that tab to trigger AI
+      // Send a message to the content script in the active tab.
       try {
         await chrome.tabs.sendMessage(tab.id, {
-          type: 'EXPLAIN_TEXT_FROM_CONTEXT_MENU',
+          type: MessageTypes.EXPLAIN_TEXT_FROM_CONTEXT_MENU,
           text: info.selectionText,
         });
         console.log('[bg] Context menu click sent to content script for tab:', tab.id);
 
-        // Optional: Open the side panel immediately if you want
+        // Optional: You could also open the side panel immediately here if desired.
         // await browser.sidePanel.open({ tabId: tab.id });
 
       } catch (e) {
