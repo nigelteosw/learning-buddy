@@ -9,6 +9,7 @@ import {
   type PromptSession,
 } from "@/types/promptTypes";
 import { checkModelAvailability } from "@/lib/utils/language";
+import { Card } from "../db";
 
 function hasLanguageModel(): boolean {
   return typeof (self as any).LanguageModel !== "undefined";
@@ -62,6 +63,7 @@ class PromptClient {
   private creating?: Promise<PromptSession>;
   private opts: GlobalPromptOpts = { ...defaultPromptOpts };
   private availabilityStatus: PromptAvailability | null = null;
+  private pairCache = new Map<number, { trueText: string; falseText: string }>();
 
   /**
    * Update the global defaults. Similar to writerClient.setOpts().
@@ -380,8 +382,103 @@ Correct Answer: ${correctLetter}
     );
   }
 
+  async resetContext({ signal }: { signal?: AbortSignal } = {}): Promise<void> {
+    if (!this.session) {
+      // No session to reset, so we can just return.
+      return;
+    }
+    // Clone the session and make the new, clean-context session the active one.
+    await this.cloneSession({ signal, makeActive: true });
+  }
+
+  private async runSinglePrompt(prompt: string, { signal }: { signal?: AbortSignal } = {}) {
+    const stream = await this.runStreamingPrompt(() => prompt, signal);
+
+    let text = "";
+    for await (const chunk of stream) text += chunk;
+    return text.trim();
+  }
+
+  private async generateTrueSentence(front: string, concept: string, signal?: AbortSignal) {
+      return this.runSinglePrompt(
+    `Write one natural, textbook-style sentence that correctly defines this idea.
+    Use ONLY the explanation as truth. Do not name the concept. 12–26 words.
+
+    Explanation:
+    ${front}
+
+    Output only the sentence.`,
+        { signal }
+      );
+    }
+
+  private async generateFalseSentence(front: string, concept: string, signal?: AbortSignal) {
+  return this.runSinglePrompt(
+  `Write one natural, textbook-style sentence that SEEMS correct but is WRONG by contradicting ONE key fact in the explanation.
+  Use ONLY the explanation. Do not name the concept. 12–26 words. No meta text.
+
+  Explanation:
+  ${front}
+
+  Output only the sentence.`,
+      { signal }
+    );
+  }
+
+  async generateStatementStream(
+    concept: string,
+    front: string,
+    wantsFalse: boolean,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<{ statementStream: AsyncIterable<string>; isFalse: boolean }> {
+    const isFalse = wantsFalse;
+
+    const promptFn = isFalse
+      ? () => this.generateFalseSentence(front, concept, signal)
+      : () => this.generateTrueSentence(front, concept, signal);
+
+    // This wraps the single-string-returning promise in a stream-like object
+    // so the UI can consume it consistently.
+    const statementStream = (async function* () {
+      try {
+        const result = await promptFn();
+        yield result;
+      } catch (e) {
+        console.error(
+          `Failed to generate ${isFalse ? "false" : "true"} statement`,
+          e
+        );
+        // Yield a fallback error message so the UI doesn't hang forever
+        yield "Error generating statement.";
+      }
+    })();
+
+    return { statementStream, isFalse };
+  }
+
+  async getPairForCard(card: Card, signal?: AbortSignal) {
+    if (!card.id) {
+      throw new Error("Card must have an ID to be used with getPairForCard");
+    }
+
+    const hit = this.pairCache.get(card.id);
+    if (hit) return hit;
+
+    // The private methods are available via `this`
+    const [trueText, falseText] = await Promise.all([
+      this.generateTrueSentence(card.front, card.concept, signal),
+      this.generateFalseSentence(card.front, card.concept, signal),
+    ]);
+
+    const pair = { trueText, falseText };
+    this.pairCache.set(card.id, pair);
+    return pair;
+  }
+
+
+
   /**
-   * Clone the current session. The cloned session drops conversation context
+   * Clone the current session. The cloned session drops conversation history
    * but keeps the same persona / initial prompts.
    *
    * If makeActive=true, we replace our stored session with the clone.

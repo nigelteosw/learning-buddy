@@ -1,57 +1,69 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Card, db } from '@/lib/db';
-import { updateCardSRS, ReviewQuality } from '@/lib/srs';
-import { ClickableCard } from './ClickableCard'; // 1. Import ClickableCard
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Card, db } from "@/lib/db";
+import { promptClient } from "@/lib/modelClients/promptClient";
+import { updateCardSRS, ReviewQuality } from "@/lib/srs";
 
 // Function to shuffle an array (Fisher-Yates)
 function shuffleArray<T>(array: T[]): T[] {
-  let currentIndex = array.length, randomIndex;
+  let currentIndex = array.length,
+    randomIndex;
   while (currentIndex !== 0) {
     randomIndex = Math.floor(Math.random() * currentIndex);
     currentIndex--;
     [array[currentIndex], array[randomIndex]] = [
-      array[randomIndex], array[currentIndex]];
+      array[randomIndex],
+      array[currentIndex],
+    ];
   }
   return array;
 }
 
 // Enum for game states remains the same
 enum GameState {
-  NotStarted, Loading, Playing, Finished,
+  NotStarted,
+  Loading,
+  Playing,
+  Finished,
 }
 
 export function TestGame() {
+  const questionIdRef = useRef(0);
   const [gameState, setGameState] = useState<GameState>(GameState.NotStarted);
-  // Store ALL cards loaded initially to pick distractors
-  const [allCards, setAllCards] = useState<Card[]>([]); 
   // Store the 5 cards for this specific session
-  const [sessionCards, setSessionCards] = useState<Card[]>([]); 
+  const [sessionCards, setSessionCards] = useState<Card[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [sessionScore, setSessionScore] = useState(0);
-  
+  const [questionLoading, setQuestionLoading] = useState(false);
+
   // New state for the quiz interaction
-  const [quizOptions, setQuizOptions] = useState<string[]>([]); // Options for the current question
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null); // User's choice
+  const [quizStatement, setQuizStatement] = useState<string>(""); // The T/F statement
+  const [isStatementTrue, setIsStatementTrue] = useState<boolean>(false); // The ground truth for the statement
+  const [selectedAnswer, setSelectedAnswer] = useState<boolean | null>(null); // User's choice: true or false
   const [isAnswerCorrect, setIsAnswerCorrect] = useState<boolean | null>(null); // Feedback state
   const [showNextButton, setShowNextButton] = useState(false); // Control when "Next" appears
 
   // --- Start Session Logic ---
   const handleStartSession = async () => {
-    setGameState(GameState.Loading);
-    const loadedCards = await db.cards.toArray();
-    
-    if (loadedCards.length < 4) { // Need at least 4 cards for 1 correct + 3 distractors
-      setGameState(GameState.NotStarted);
-      alert("You need at least 4 cards saved to start a quiz session!");
+    try {
+      await promptClient.initFromUserGesture(); // <-- do this on a click
+    } catch (e) {
+      alert("Model not ready in this context. Try clicking Start again.");
       return;
     }
 
-    setAllCards(loadedCards); // Store all cards for generating options
-    
+    setGameState(GameState.Loading);
+    const loadedCards = await db.cards.toArray();
+
+    if (loadedCards.length < 1) {
+      setGameState(GameState.NotStarted);
+      alert("You need at least 1 card saved to start a quiz session!");
+      return;
+    }
+
     // Shuffle and pick 5 cards for the session
     const shuffled = shuffleArray([...loadedCards]);
     const sessionSubset = shuffled.slice(0, 5); // Limit to 5 questions
-    
+
     setSessionCards(sessionSubset);
     setCurrentCardIndex(0);
     setSessionScore(0);
@@ -68,37 +80,62 @@ export function TestGame() {
   }, [sessionCards, currentCardIndex]);
 
   useEffect(() => {
-    if (gameState === GameState.Playing && currentCard && allCards.length > 0) {
-      // 1. Get the correct answer
-      const correctAnswer = currentCard.concept;
-      
-      // 2. Get 3 unique distractors (headings from other cards)
-      const distractors = allCards
-        .filter(card => card.id !== currentCard.id) // Exclude the current card
-        .map(card => card.concept) // Get headings
-        .filter((heading, index, self) => self.indexOf(heading) === index); // Unique headings
-      
-      const shuffledDistractors = shuffleArray(distractors).slice(0, 3);
-      
-      // 3. Combine and shuffle
-      const options = shuffleArray([correctAnswer, ...shuffledDistractors]);
-      setQuizOptions(options);
-    }
-  }, [currentCard, allCards, gameState]); // Re-run when card or game state changes
+    if (gameState !== GameState.Playing || !currentCard) return;
 
+    const runId = ++questionIdRef.current; // unique per question
+    const abort = new AbortController();
+
+    // hard reset UI for this round
+    setQuestionLoading(true);
+    setSelectedAnswer(null);
+    setIsAnswerCorrect(null);
+    setShowNextButton(false);
+    setQuizStatement("");
+
+    (async () => {
+      try {
+        // Reset the prompt client's context to ensure this question is not influenced by the previous one.
+        await promptClient.resetContext({ signal: abort.signal });
+
+        // Fetch both true and false statements for the card. The client will cache them.
+        const pair = await promptClient.getPairForCard(currentCard, abort.signal);
+
+        if (abort.signal.aborted || questionIdRef.current !== runId) return;
+
+        // Randomly decide whether to show the true or false statement
+        const showFalseStatement = Math.random() < 0.5;
+
+        if (showFalseStatement) {
+          setQuizStatement(pair.falseText);
+          setIsStatementTrue(false);
+        } else {
+          setQuizStatement(pair.trueText);
+          setIsStatementTrue(true);
+        }
+      } catch (err) {
+        if (!abort.signal.aborted) {
+          console.error("Failed to generate quiz options:", err);
+          setGameState(GameState.NotStarted);
+          alert("Failed to generate quiz options. Please try again.");
+        }
+      } finally {
+        if (!abort.signal.aborted && questionIdRef.current === runId) {
+          setQuestionLoading(false);
+        }
+      }
+    })();
+
+    return () => abort.abort();
+  }, [currentCard?.id, gameState]); // Re-run when card or game state changes
 
   // --- Handle User Answering ---
-  const handleAnswerSelection = (selectedHeading: string) => {
-    if (selectedAnswer !== null) return; // Already answered
-
-    setSelectedAnswer(selectedHeading);
-    const correct = selectedHeading === currentCard.concept;
+  const handleAnswerSelection = (userThinksItIsTrue: boolean) => {
+    if (selectedAnswer !== null || questionLoading) return;
+    setSelectedAnswer(userThinksItIsTrue);
+    const correct = userThinksItIsTrue === isStatementTrue;
     setIsAnswerCorrect(correct);
-    setShowNextButton(true); // Show the "Next" button
-
-    if (correct) {
-      setSessionScore(prev => prev + 1);
-    }
+    setShowNextButton(true);
+    if (correct) setSessionScore((prev) => prev + 1);
   };
 
   // --- Handle Moving to Next Question ---
@@ -111,12 +148,11 @@ export function TestGame() {
 
     // Move to next card or finish
     if (currentCardIndex < sessionCards.length - 1) {
-      setCurrentCardIndex(prev => prev + 1);
+      setCurrentCardIndex((prev) => prev + 1);
       // Reset state for the new card
       setSelectedAnswer(null);
       setIsAnswerCorrect(null);
       setShowNextButton(false);
-      // isFlipped state is managed by ClickableCard now, no need to reset here
     } else {
       setGameState(GameState.Finished);
     }
@@ -137,7 +173,7 @@ export function TestGame() {
     return (
       <div className="flex flex-col items-center justify-center space-y-4 pt-10">
         <h2 className="text-xl font-semibold text-white">Ready for a Quiz?</h2>
-        <button 
+        <button
           onClick={handleStartSession}
           className="rounded-lg bg-blue-600 px-6 py-3 text-lg font-semibold text-white transition-colors hover:bg-blue-500"
         >
@@ -149,14 +185,14 @@ export function TestGame() {
 
   if (gameState === GameState.Finished) {
     // Session finished screen (Score out of 5)
-     return (
+    return (
       <div className="text-center space-y-4">
         <h2 className="text-xl font-semibold text-white">Quiz Complete!</h2>
         <p className="text-lg font-medium text-green-400">
-          Score: {sessionScore} / {sessionCards.length} 
+          Score: {sessionScore} / {sessionCards.length}
         </p>
-        <button 
-          onClick={handleRestart} 
+        <button
+          onClick={handleRestart}
           className="rounded-md bg-zinc-600 px-4 py-2 text-white hover:bg-zinc-500"
         >
           Back to Start
@@ -167,7 +203,9 @@ export function TestGame() {
 
   // --- Main Playing UI (gameState === GameState.Playing) ---
   if (!currentCard) {
-     return <div className="text-center text-red-400">Error: No card to display.</div>;
+    return (
+      <div className="text-center text-red-400">Error: No card to display.</div>
+    );
   }
 
   return (
@@ -176,54 +214,72 @@ export function TestGame() {
         Question {currentCardIndex + 1} of {sessionCards.length}
       </div>
 
-      {/* --- Clickable Card Display --- */}
-      {/* It manages its own isFlipped state */}
-      <ClickableCard 
-        description={currentCard.front} 
-        explanation={currentCard.back} 
-      />
+      {/* --- Question Prompt --- */}
+      {questionLoading ? (
+        <div className="text-center text-zinc-400 py-8">
+          Generating question...
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4 text-center">
+            <p className="text-sm text-zinc-400">
+              Is this statement about{" "}
+              <strong className="text-blue-400">{currentCard.concept}</strong>{" "}
+              true or false?
+            </p>
+            <blockquote className="mt-2 text-lg italic text-white">
+              "{quizStatement}"
+            </blockquote>
+          </div>
 
-      {/* --- Multiple Choice Options --- */}
-      <div className="grid grid-cols-2 gap-2 pt-2">
-        {quizOptions.map((option) => {
-          // Determine button style based on selection and correctness
-          let buttonClass = "rounded-md p-3 text-center transition-colors ";
-          const isSelected = selectedAnswer === option;
-          const isCorrectAnswer = option === currentCard.concept;
+          {/* --- True/False Buttons --- */}
+          <div className="grid grid-cols-2 gap-4 pt-2">
+            {[true, false].map((value) => {
+              const label = value ? "True" : "False";
+              let buttonClass =
+                "rounded-md p-4 text-lg font-semibold text-center transition-colors ";
+              const isSelected = selectedAnswer === value;
+              const isCorrectChoice = isStatementTrue === value;
 
-          if (selectedAnswer === null) {
-            // Not answered yet
-            buttonClass += "bg-zinc-700 text-white hover:bg-zinc-600";
-          } else if (isSelected) {
-            // This button was selected
-            buttonClass += isAnswerCorrect ? "bg-green-600 text-white" : "bg-red-600 text-white";
-          } else if (isCorrectAnswer) {
-             // This is the correct answer, but wasn't selected (show correct)
-             buttonClass += "bg-green-800 text-green-300 border border-green-600";
-          }
-           else {
-            // Incorrect, unselected option
-            buttonClass += "bg-zinc-800 text-zinc-500 cursor-not-allowed";
-          }
+              if (selectedAnswer === null) {
+                // Not answered yet
+                buttonClass += "bg-zinc-700 text-white hover:bg-zinc-600";
+              } else if (isSelected) {
+                // This button was selected by the user
+                buttonClass += isAnswerCorrect
+                  ? "bg-green-600 text-white"
+                  : "bg-red-600 text-white";
+              } else if (isCorrectChoice) {
+                // This is the correct answer, but wasn't selected
+                buttonClass +=
+                  "bg-green-800 text-green-300 border border-green-600";
+                // This is the correct answer, but wasn't selected. Highlight it.
+                buttonClass += "bg-green-600 text-white border border-green-400";
+              } else {
+                // Incorrect, unselected option
+                buttonClass += "bg-zinc-800 text-zinc-500 cursor-not-allowed";
+              }
 
-          return (
-            <button
-              key={option}
-              onClick={() => handleAnswerSelection(option)}
-              disabled={selectedAnswer !== null} // Disable after answering
-              className={buttonClass}
-            >
-              {option}
-            </button>
-          );
-        })}
-      </div>
+              return (
+                <button
+                  key={label}
+                  onClick={() => handleAnswerSelection(value)}
+                  disabled={selectedAnswer !== null}
+                  className={buttonClass}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* --- Next Button --- */}
       {showNextButton && (
         <button
           onClick={handleNextQuestion}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-500 mt-4"
+          className="w-full rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-500 mt-6"
         >
           Next Question
         </button>
