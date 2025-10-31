@@ -10,10 +10,10 @@ const cardImportSchema = z.object({
   concept: z.string(),
   front: z.string(),
   back: z.string(),
-  createdAt: z.string().datetime().or(z.date()), // Accepts ISO string or Date object
-  dueDate: z.string().datetime().or(z.date()),
-  interval: z.number().int(),
-  easeFactor: z.number(),
+  createdAt: z.string().datetime().or(z.date()).optional(), // Accepts ISO string or Date object
+  dueDate: z.string().datetime().or(z.date()).optional(),
+  interval: z.number().int().optional(),
+  easeFactor: z.number().optional(),
   // We intentionally omit 'id' to let Dexie auto-generate new ones
 });
 
@@ -55,7 +55,12 @@ export function ImportExport() {
         return;
       }
 
-      const jsonString = JSON.stringify(allCards, null, 2);
+      const cardsToExport = allCards.map(card => ({
+        concept: card.concept,
+        front: card.front,
+        back: card.back,
+      }));
+      const jsonString = JSON.stringify(cardsToExport, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -106,10 +111,10 @@ export function ImportExport() {
           concept: item.concept,
           front: item.front,
           back: item.back,
-          createdAt: new Date(item.createdAt), // Convert string back to Date
-          dueDate: new Date(item.dueDate),     // Convert string back to Date
-          interval: item.interval,
-          easeFactor: item.easeFactor,
+          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+          dueDate: item.dueDate ? new Date(item.dueDate) : new Date(),
+          interval: item.interval ?? 1,
+          easeFactor: item.easeFactor ?? 2.5,
         }));
 
         if (cardsToImport.length === 0) {
